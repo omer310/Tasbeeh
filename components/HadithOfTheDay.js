@@ -1,5 +1,3 @@
-//TODO: fix the margin problem where the text goes under the navigation bar
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   View, 
@@ -17,21 +15,35 @@ import axios from 'axios';
 import { colors, globalStyles } from '../styles/globalStyles';
 
 const EDITIONS = [
-  { label: 'Bukhari', value: 'bukhari' },
-  { label: 'Muslim', value: 'muslim' },
-  { label: 'Abu Dawud', value: 'abudawud' },
-  { label: 'Tirmidhi', value: 'tirmidhi' },
-  { label: 'Nasai', value: 'nasai' },
-  { label: 'Ibn Majah', value: 'ibnmajah' },
+  { label: 'Bukhari', value: 'bukhari', labelAr: 'البخاري' },
+  { label: 'Muslim', value: 'muslim', labelAr: 'مسلم' },
+  { label: 'Abu Dawud', value: 'abudawud', labelAr: 'أبو داود' },
+  { label: 'Tirmidhi', value: 'tirmidhi', labelAr: 'الترمذي' },
+  { label: 'Nasai', value: 'nasai', labelAr: 'النسائي' },
+  { label: 'Ibn Majah', value: 'ibnmajah', labelAr: 'ابن ماجه' },
 ];
 
-export default function HadithOfTheDay({ themeColors }) {
+const translations = {
+  hadithSearch: { en: 'Hadith Search', ar: 'بحث الحديث' },
+  searchPlaceholder: { en: 'Search for a hadith...', ar: 'ابحث عن حديث...' },
+  search: { en: 'Search', ar: 'بحث' },
+  getRandomHadith: { en: 'Get Random Hadith', ar: 'احصل على حديث عشوائي' },
+  noHadithsFound: { en: 'No hadiths found.', ar: 'لم يتم العثور على أحاديث.' },
+  hadith: { en: 'Hadith', ar: 'حديث' },
+  close: { en: 'Close', ar: 'إغلاق' },
+};
+
+export default function HadithOfTheDay({ themeColors, language }) {
   const [hadiths, setHadiths] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEdition, setSelectedEdition] = useState('bukhari');
   const [isPickerVisible, setPickerVisible] = useState(false);
+
+  const getTranslatedText = (key) => {
+    return translations[key][language] || key;
+  };
 
   useEffect(() => {
     fetchRandomHadith();
@@ -96,11 +108,14 @@ export default function HadithOfTheDay({ themeColors }) {
 
   const renderHadith = useCallback(({ item }) => (
     <View style={styles.hadithContainer}>
-      <Text style={styles.hadithText}>{item.engText}</Text>
-      <Text style={styles.arabicText}>{item.araText}</Text>
-      <Text style={styles.hadithReference}>- {item.collection}, Hadith {item.hadithnumber}</Text>
+      <Text style={[styles.hadithText, { color: themeColors.textColor }]}>{item.engText}</Text>
+      <Text style={[styles.arabicText, { color: themeColors.textColor }]}>{item.araText}</Text>
+      <Text style={[styles.hadithReference, { color: themeColors.secondaryTextColor }]}>
+        - {language === 'ar' ? EDITIONS.find(e => e.value === selectedEdition).labelAr : item.collection}, 
+        {getTranslatedText('hadith')} {item.hadithnumber}
+      </Text>
     </View>
-  ), []);
+  ), [language, selectedEdition, themeColors]);
 
   const onChangeSearchTerm = useCallback((text) => {
     setSearchTerm(text);
@@ -116,17 +131,17 @@ export default function HadithOfTheDay({ themeColors }) {
 
   const renderHeader = useMemo(() => (
     <View style={styles.header}>
-      <Text style={[styles.title, { color: themeColors.textColor }]}>Hadith Search</Text>
+      <Text style={[styles.title, { color: themeColors.textColor }]}>{getTranslatedText('hadithSearch')}</Text>
       <View style={styles.searchContainer}>
         <TextInput
           style={[styles.searchInput, { color: themeColors.textColor, borderColor: themeColors.textColor }]}
-          placeholder="Search for a hadith..."
-          placeholderTextColor={themeColors.textColor}
+          placeholder={getTranslatedText('searchPlaceholder')}
+          placeholderTextColor={themeColors.secondaryTextColor}
           value={searchTerm}
           onChangeText={onChangeSearchTerm}
         />
         <TouchableOpacity style={styles.button} onPress={onPressSearch}>
-          <Text style={styles.buttonText}>Search</Text>
+          <Text style={styles.buttonText}>{getTranslatedText('search')}</Text>
         </TouchableOpacity>
       </View>
       <TouchableOpacity 
@@ -134,14 +149,16 @@ export default function HadithOfTheDay({ themeColors }) {
         onPress={() => setPickerVisible(true)}
       >
         <Text style={[styles.pickerButtonText, { color: themeColors.textColor }]}>
-          {EDITIONS.find(e => e.value === selectedEdition).label}
+          {language === 'ar' 
+            ? EDITIONS.find(e => e.value === selectedEdition).labelAr 
+            : EDITIONS.find(e => e.value === selectedEdition).label}
         </Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.button} onPress={onPressRandom}>
-        <Text style={styles.buttonText}>Get Random Hadith</Text>
+        <Text style={styles.buttonText}>{getTranslatedText('getRandomHadith')}</Text>
       </TouchableOpacity>
     </View>
-  ), [themeColors, searchTerm, selectedEdition, onChangeSearchTerm, onPressSearch, onPressRandom]);
+  ), [themeColors, searchTerm, selectedEdition, language, onChangeSearchTerm, onPressSearch, onPressRandom]);
 
   const renderPickerModal = () => (
     <Modal
@@ -168,7 +185,7 @@ export default function HadithOfTheDay({ themeColors }) {
                 { color: themeColors.textColor },
                 selectedEdition === edition.value && styles.pickerItemTextSelected
               ]}>
-                {edition.label}
+                {language === 'ar' ? edition.labelAr : edition.label}
               </Text>
             </TouchableOpacity>
           ))}
@@ -176,7 +193,7 @@ export default function HadithOfTheDay({ themeColors }) {
             style={[styles.closeButton, { backgroundColor: colors.primary }]}
             onPress={() => setPickerVisible(false)}
           >
-            <Text style={styles.closeButtonText}>Close</Text>
+            <Text style={styles.closeButtonText}>{getTranslatedText('close')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -195,9 +212,9 @@ export default function HadithOfTheDay({ themeColors }) {
           loading ? (
             <ActivityIndicator size="large" color={colors.primary} />
           ) : error ? (
-            <Text style={styles.error}>{error}</Text>
+            <Text style={[styles.error, { color: themeColors.textColor }]}>{error}</Text>
           ) : (
-            <Text style={styles.error}>No hadiths found.</Text>
+            <Text style={[styles.error, { color: themeColors.textColor }]}>{getTranslatedText('noHadithsFound')}</Text>
           )
         }
         contentContainerStyle={styles.flatListContent}

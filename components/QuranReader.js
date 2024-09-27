@@ -4,6 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import quranImages from './quranImages';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import CustomColorPicker from './CustomColorPicker';
 
 // Surah lookup table (page numbers are examples, please verify and adjust)
 const surahData = [
@@ -123,28 +126,79 @@ const surahData = [
   { name: "An-Nas", startPage: 604 }
 ];
 
+// ... existing imports and code ...
+
 function QuranReader({ navigation, themeColors }) {
-  const [currentPage, setCurrentPage] = useState(305);
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedSurah, setSelectedSurah] = useState(null);
   const [surahs, setSurahs] = useState([]);
   const [filteredSurahs, setFilteredSurahs] = useState([]);
-  const [showSurahList, setShowSurahList] = useState(true);
+  const [showSurahList, setShowSurahList] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [currentJuz, setCurrentJuz] = useState(16);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentSurah, setCurrentSurah] = useState("");
+  const [bookmarkedPage, setBookmarkedPage] = useState(null);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [selectedColor, setSelectedColor] = useState('#FF9800');
+  const [bookmarks, setBookmarks] = useState({});
 
   useEffect(() => {
     // Fetch surahs data from API
-    fetch('https://api.quran.com/api/v4/chapters')
+    fetch('https://api.quran.com/api/v4/chapters?language=en')
       .then(response => response.json())
       .then(data => {
         setSurahs(data.chapters);
         setFilteredSurahs(data.chapters);
       })
       .catch(error => console.error('Error fetching surahs:', error));
+
+    // Load bookmarks when component mounts
+    loadBookmarks();
   }, []);
+
+  useEffect(() => {
+    // Re-sort surahs when bookmark changes
+    const sortedSurahs = sortSurahs([...surahs]);
+    setSurahs(sortedSurahs);
+    setFilteredSurahs(sortedSurahs);
+  }, [bookmarks]);
+
+  const loadBookmarks = async () => {
+    try {
+      const savedBookmarks = await AsyncStorage.getItem('quranBookmarks');
+      if (savedBookmarks !== null) {
+        setBookmarks(JSON.parse(savedBookmarks));
+      }
+    } catch (error) {
+      console.error('Error loading bookmarks:', error);
+    }
+  };
+
+  const saveBookmarks = async (newBookmarks) => {
+    try {
+      await AsyncStorage.setItem('quranBookmarks', JSON.stringify(newBookmarks));
+      setBookmarks(newBookmarks);
+    } catch (error) {
+      console.error('Error saving bookmarks:', error);
+    }
+  };
+
+  const sortSurahs = (surahsToSort) => {
+    return surahsToSort.sort((a, b) => {
+      const aBookmarked = Object.keys(bookmarks).some(page => 
+        page >= a.pages[0] && page <= a.pages[a.pages.length - 1]
+      );
+      const bBookmarked = Object.keys(bookmarks).some(page => 
+        page >= b.pages[0] && page <= b.pages[b.pages.length - 1]
+      );
+      
+      if (aBookmarked && !bBookmarked) return -1;
+      if (!aBookmarked && bBookmarked) return 1;
+      return a.id - b.id;
+    });
+  };
 
   useEffect(() => {
     if (selectedSurah) {
@@ -166,8 +220,15 @@ function QuranReader({ navigation, themeColors }) {
   }, [currentPage]);
 
   useEffect(() => {
+    const normalizeText = (text) => {
+      return text.toLowerCase()
+        .replace(/[^\w\s\u0600-\u06FF]/gi, '') // Remove special characters but keep Arabic
+        .replace(/\s+/g, ''); // Remove spaces
+    };
+
     const filtered = surahs.filter(surah =>
-      surah.name_simple.toLowerCase().replace('-', '').includes(searchQuery.toLowerCase().replace('-', '')) ||
+      normalizeText(surah.name_simple).includes(normalizeText(searchQuery)) ||
+      normalizeText(surah.name_arabic).includes(normalizeText(searchQuery)) ||
       surah.id.toString().includes(searchQuery)
     );
     setFilteredSurahs(filtered);
@@ -197,22 +258,84 @@ function QuranReader({ navigation, themeColors }) {
     }
   };
 
-  const renderSurahItem = ({ item }) => (
-    <TouchableOpacity onPress={() => handleSurahClick(item)} style={styles.surahItemContainer}>
-      <View style={styles.surahNumberContainer}>
-        <Text style={styles.surahNumber}>{item.id}</Text>
-      </View>
-      <View style={styles.surahInfoContainer}>
-        <Text style={[styles.surahName, { color: themeColors.textColor }]}>{item.name_simple}</Text>
-        <Text style={styles.surahDetails}>
-          Page {item.pages[0]} • {item.verses_count} verses • {item.revelation_place}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const toggleBookmark = () => {
+    if (bookmarks[currentPage]) {
+      // If there's already a bookmark, remove it
+      const newBookmarks = { ...bookmarks };
+      delete newBookmarks[currentPage];
+      saveBookmarks(newBookmarks);
+    } else {
+      // If there's no bookmark, show the color picker
+      setShowColorPicker(true);
+    }
+  };
+
+  const handleColorSelect = (color) => {
+    const newBookmarks = { ...bookmarks };
+    if (newBookmarks[currentPage] === color) {
+      delete newBookmarks[currentPage];
+    } else {
+      newBookmarks[currentPage] = color;
+    }
+    saveBookmarks(newBookmarks);
+    setShowColorPicker(false);
+  };
+
+  const getUsedColors = () => {
+    return Object.values(bookmarks) || [];
+  };
+
+  const renderBookmarkIcon = () => {
+    const bookmarkColor = bookmarks[currentPage];
+    return (
+      <TouchableOpacity onPress={toggleBookmark} style={styles.iconButtonContainer}>
+        <LinearGradient
+          colors={[themeColors.gradientStart, themeColors.gradientEnd]}
+          style={styles.iconButton}
+        >
+          <Ionicons 
+            name={bookmarkColor ? "bookmark" : "bookmark-outline"} 
+            size={24} 
+            color={bookmarkColor || "#FFFFFF"} 
+          />
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderSurahItem = ({ item }) => {
+    const isBookmarked = Object.keys(bookmarks).some(page => 
+      page >= item.pages[0] && page <= item.pages[item.pages.length - 1]
+    );
+    const bookmarkColor = isBookmarked ? bookmarks[item.pages[0]] : null;
+
+    return (
+      <TouchableOpacity onPress={() => handleSurahClick(item)} style={styles.surahItemContainer}>
+        <LinearGradient
+          colors={[themeColors.gradientStart, themeColors.gradientEnd]}
+          style={styles.surahNumberContainer}
+        >
+          <Text style={styles.surahNumber}>{item.id}</Text>
+        </LinearGradient>
+        <View style={styles.surahInfoContainer}>
+          <Text style={[styles.surahName, { color: themeColors.textColor }]}>{item.name_simple}</Text>
+          <Text style={[styles.surahArabicName, { color: themeColors.textColor }]}>{item.name_arabic}</Text>
+          <Text style={[styles.surahDetails, { color: themeColors.secondaryTextColor }]}>
+            Page {item.pages[0]} • {item.verses_count} verses • {item.revelation_place}
+          </Text>
+        </View>
+        {isBookmarked && (
+          <Ionicons name="bookmark" size={24} color={bookmarkColor} style={styles.bookmarkIcon} />
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   const renderQuranPage = () => (
-    <View style={styles.pageContainer}>
+    <View style={[
+      styles.pageContainer,
+      focusMode && styles.fullScreenPageContainer
+    ]}>
       <View style={styles.headerContainer}>
         <Text style={styles.headerText}>{currentSurah}</Text>
         <Text style={styles.headerText}>Juz {currentJuz}</Text>
@@ -241,12 +364,23 @@ function QuranReader({ navigation, themeColors }) {
           <View style={styles.quranContent}>
             {!focusMode && (
               <View style={[styles.topBar, { backgroundColor: themeColors.backgroundColor }]}>
-                <TouchableOpacity onPress={toggleSurahList} style={styles.iconButton}>
-                  <Ionicons name={showSurahList ? "menu" : "menu-outline"} size={24} color={themeColors.textColor} />
+                <TouchableOpacity onPress={toggleSurahList} style={styles.iconButtonContainer}>
+                  <LinearGradient
+                    colors={[themeColors.gradientStart, themeColors.gradientEnd]}
+                    style={styles.iconButton}
+                  >
+                    <Ionicons name={showSurahList ? "menu" : "menu-outline"} size={24} color="#FFFFFF" />
+                  </LinearGradient>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={toggleFocusMode} style={styles.iconButton}>
-                  <Ionicons name="expand" size={24} color={themeColors.textColor} />
+                <TouchableOpacity onPress={toggleFocusMode} style={styles.iconButtonContainer}>
+                  <LinearGradient
+                    colors={[themeColors.gradientStart, themeColors.gradientEnd]}
+                    style={styles.iconButton}
+                  >
+                    <Ionicons name="expand" size={24} color="#FFFFFF" />
+                  </LinearGradient>
                 </TouchableOpacity>
+                {renderBookmarkIcon()}
               </View>
             )}
             <PanGestureHandler
@@ -265,31 +399,68 @@ function QuranReader({ navigation, themeColors }) {
                 onPress={toggleFocusMode} 
                 style={styles.exitFullScreenButton}
               >
-                <Ionicons name="contract" size={24} color={themeColors.textColor} />
+                <LinearGradient
+                  colors={[themeColors.gradientStart, themeColors.gradientEnd]}
+                  style={styles.exitFullScreenGradient}
+                >
+                  <Ionicons name="contract" size={24} color="#FFFFFF" />
+                </LinearGradient>
               </TouchableOpacity>
             )}
           </View>
           {!focusMode && showSurahList && (
-            <View style={[styles.surahList, { backgroundColor: themeColors.backgroundColor }]}>
-              <View style={styles.surahListHeader}>
-                <Text style={[styles.heading, { color: themeColors.textColor }]}>Contents</Text>
-                <View style={styles.searchContainer}>
-                  <Ionicons name="search" size={20} color={themeColors.textColor} style={styles.searchIcon} />
-                  <TextInput
-                    style={[styles.searchInput, { color: themeColors.textColor }]}
-                    placeholder="Search Surah"
-                    placeholderTextColor={themeColors.textColor}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                  />
+            <BlurView
+              intensity={120}
+              tint={themeColors.isDark ? 'dark' : 'light'}
+              style={styles.surahListContainer}
+            >
+              <View style={[styles.surahList, { backgroundColor: themeColors.backgroundColor + '80' }]}>
+                <View style={styles.surahListHeader}>
+                  <Text style={[styles.heading, { color: themeColors.textColor }]}>Contents</Text>
+                  <View style={[styles.searchContainer, { backgroundColor: themeColors.inputBackground }]}>
+                    <Ionicons name="search" size={20} color={themeColors.textColor} style={styles.searchIcon} />
+                    <TextInput
+                      style={[styles.searchInput, { color: themeColors.textColor }]}
+                      placeholder="Search Surah"
+                      placeholderTextColor={themeColors.placeholderColor}
+                      value={searchQuery}
+                      onChangeText={setSearchQuery}
+                    />
+                  </View>
                 </View>
+                <FlatList
+                  data={filteredSurahs}
+                  renderItem={renderSurahItem}
+                  keyExtractor={(item) => item.id.toString()}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.surahListContent}
+                />
               </View>
-              <FlatList
-                data={filteredSurahs}
-                renderItem={renderSurahItem}
-                keyExtractor={(item) => item.id.toString()}
-              />
-            </View>
+            </BlurView>
+          )}
+          {showColorPicker && (
+            <BlurView
+              intensity={120}
+              tint={themeColors.isDark ? 'dark' : 'light'}
+              style={styles.colorPickerContainer}
+            >
+              <View style={styles.colorPickerContent}>
+                <Text style={[styles.colorPickerTitle, { color: themeColors.textColor }]}>
+                  Select Bookmark Color
+                </Text>
+                <CustomColorPicker
+                  onColorSelected={handleColorSelect}
+                  currentColor={bookmarks[currentPage]}
+                  usedColors={getUsedColors()}
+                />
+                <TouchableOpacity 
+                  onPress={() => setShowColorPicker(false)}
+                  style={styles.closeColorPickerButton}
+                >
+                  <Text style={styles.closeColorPickerText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </BlurView>
           )}
         </View>
       </SafeAreaView>
@@ -313,11 +484,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: 15,
+    paddingTop: 30,
     borderBottomWidth: 1,
-    borderColor: '#ccc',
+    borderColor: 'rgba(204, 204, 204, 0.3)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1001,
+  },
+  iconButtonContainer: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginLeft: 10,
   },
   iconButton: {
-    padding: 5,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   pageContainer: {
     flex: 1,
@@ -325,6 +510,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 60,
+  },
+  fullScreenPageContainer: {
+    paddingTop: 40,
   },
   headerContainer: {
     flexDirection: 'row',
@@ -389,57 +577,57 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderStyle: 'dashed',
   },
-  surahList: {
+  surahListContainer: {
     position: 'absolute',
-    top: 60,
+    top: 85,
     left: 0,
-    width: '80%',
-    height: '90%',
-    borderRightWidth: 1,
-    borderColor: '#ccc',
+    width: '85%',
+    height: '87%',
+    borderTopRightRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
     zIndex: 1000,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+  },
+  surahList: {
+    flex: 1,
+    paddingHorizontal: 15,
   },
   surahListHeader: {
-    padding: 15,
+    paddingVertical: 20,
   },
   heading: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 15,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    marginTop: 10,
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    height: 45,
   },
   searchIcon: {
     marginRight: 10,
   },
   searchInput: {
     flex: 1,
-    height: 40,
     fontSize: 16,
+  },
+  surahListContent: {
+    paddingBottom: 80,
   },
   surahItemContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderColor: '#eee',
+    borderColor: 'rgba(150, 150, 150, 0.2)',
   },
   surahNumberContainer: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
@@ -447,35 +635,51 @@ const styles = StyleSheet.create({
   surahNumber: {
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  surahInfoContainer: {
-    flex: 1,
-  },
-  surahName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  surahDetails: {
-    fontSize: 12,
-    color: '#666',
+    color: '#FFFFFF',
   },
   fullScreenContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    bottom: -5,
-    zIndex: 1000,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  exitFullScreenButton: {
+  colorPickerContainer: {
     position: 'absolute',
-    top: 20,
-    right: 20,
-    zIndex: 1001,
-    padding: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1002,
+  },
+  colorPickerContent: {
+    width: '80%',
+    height: '60%',
+    backgroundColor: 'white',
     borderRadius: 20,
+    padding: 20,
+  },
+  colorPickerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  closeColorPickerButton: {
+    marginTop: 20,
+    padding: 10,
+    backgroundColor: '#ddd',
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  closeColorPickerText: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

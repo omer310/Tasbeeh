@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Image, View, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Image, View, TouchableOpacity, ScrollView, I18nManager } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -93,11 +93,30 @@ export default function App() {
   const [theme, setTheme] = useState('default');
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [selectedFont, setSelectedFont] = useState('Scheherazade');
+  const [language, setLanguage] = useState('ar'); // Default to Arabic
 
   useEffect(() => {
     loadSettings();
     loadFonts();
+    setupLanguage();
   }, []);
+
+  const setupLanguage = async () => {
+    const savedLanguage = await AsyncStorage.getItem('language');
+    if (savedLanguage) {
+      setLanguage(savedLanguage);
+      I18nManager.forceRTL(savedLanguage === 'ar');
+    }
+  };
+
+  const changeLanguage = async (newLanguage) => {
+    setLanguage(newLanguage);
+    await AsyncStorage.setItem('language', newLanguage);
+    I18nManager.forceRTL(newLanguage === 'ar');
+    // In a real app, you'd want to use a more sophisticated method to reload
+    // This is just for demonstration purposes
+    console.log('App should reload here to apply RTL changes');
+  };
 
   const loadFonts = async () => {
     await Font.loadAsync({
@@ -115,9 +134,11 @@ export default function App() {
       const savedDarkMode = await AsyncStorage.getItem('darkMode');
       const savedTheme = await AsyncStorage.getItem('theme');
       const savedFont = await AsyncStorage.getItem('selectedFont');
+      const savedLanguage = await AsyncStorage.getItem('language');
       if (savedDarkMode !== null) setDarkMode(JSON.parse(savedDarkMode));
       if (savedTheme !== null) setTheme(savedTheme);
       if (savedFont !== null) setSelectedFont(savedFont);
+      if (savedLanguage !== null) setLanguage(savedLanguage);
     } catch (error) {
       console.error('Error loading settings:', error);
     }
@@ -141,11 +162,19 @@ export default function App() {
 
   // Create a themeColors object based on the dark mode state
   const themeColors = {
-    backgroundColor: darkMode ? '#333' : '#fff',
-    textColor: darkMode ? '#fff' : '#000',
-    tabBarColor: darkMode ? '#222' : '#fff',
-    activeTabColor: '#4CAF50', // Changed from '#2196F3' (blue) to '#4CAF50' (green)
+    backgroundColor: darkMode ? '#1E1E1E' : '#E8F5E9',
+    textColor: darkMode ? '#FFFFFF' : '#1B5E20',
+    tabBarColor: darkMode ? '#2E2E2E' : '#FFFFFF',
+    activeTabColor: '#4CAF50',
+    primary: '#4CAF50',
+    accent: '#81C784',
     fontFamily: selectedFont,
+    gradientStart: '#4CAF50',
+    gradientEnd: '#2E7D32',
+    inputBackground: 'rgba(255, 255, 255, 0.1)',
+    placeholderColor: darkMode ? '#BBBBBB' : '#689F38',
+    secondaryTextColor: darkMode ? '#BBBBBB' : '#689F38',
+    isDark: darkMode, // Set to true if darkMode is true, false otherwise
   };
 
   if (!fontsLoaded) {
@@ -216,7 +245,7 @@ export default function App() {
         <Tab.Screen name="Prayer Times">
           {(props) => (
             <View style={{ flex: 1 }}>
-              <PrayerTimes {...props} themeColors={themeColors} />
+              <PrayerTimes {...props} themeColors={themeColors}  />
             </View>
           )}
         </Tab.Screen>
@@ -241,14 +270,14 @@ export default function App() {
           {(props) => (
             <ScreenWrapper themeColors={themeColors}>
               <ScrollView contentContainerStyle={styles.calendarContent}>
-                <IslamicCalendar {...props} themeColors={themeColors} />
+                <IslamicCalendar {...props} themeColors={themeColors}/>
               </ScrollView>
             </ScreenWrapper>
           )}
         </Tab.Screen>
         <Tab.Screen name="Hadith">
           {(props) => (
-            <HadithOfTheDay {...props} themeColors={themeColors} />
+            <HadithOfTheDay {...props} themeColors={themeColors} language={language} />
           )}
         </Tab.Screen>
         <Tab.Screen name="Settings">
@@ -262,6 +291,8 @@ export default function App() {
               themeColors={themeColors}
               selectedFont={selectedFont}
               changeFont={changeFont}
+              language={language}
+              changeLanguage={changeLanguage}
             />
           )}
         </Tab.Screen>

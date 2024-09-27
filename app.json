@@ -17,32 +17,27 @@
         "UIBackgroundModes": [
           "audio"
         ]
-      }
+      },
+      "icon": "./assets/icon.png"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
+      "icon": "./assets/icon.png",
       "permissions": [
         "NOTIFICATIONS",
         "android.permission.VIBRATE",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.INTERNET"
       ],
-      "package": "com.omer310.TasbeehApp"
+      "package": "com.omer310.TasbeehApp",
+      "useNextNotificationsApi": true
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/icon.png"
     },
     "plugins": [
-      [
-        "expo-av",
-        {
-          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone."
-        }
-      ],
       [
         "expo-notifications",
         {
@@ -50,12 +45,23 @@
           "color": "#ffffff",
           "sounds": [
             "./assets/adhan.mp3",
-            "./assets/madinah-adhan.mp3",
-            "./assets/makkah-adhan.mp3"
+            "./assets/madinah_adhan.mp3",
+            "./assets/makkah_adhan.mp3"
           ]
         }
       ],
-      "expo-asset"
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location."
+        }
+      ],
+      [
+        "expo-background-fetch",
+        {
+          "backgroundFetch": true
+        }
+      ]
     ],
     "extra": {
       "eas": {
@@ -67,11 +73,6 @@
         "asset": "./assets/fonts/Scheherazade-Regular.ttf",
         "family": "Scheherazade"
       }
-    ],
-    "assets": [
-      "./assets/fonts/Scheherazade-Regular.ttf",
-      "./assets/fonts/Amiri-Regular.ttf",
-      "./assets/fonts/Lateef-Regular.ttf"
     ],
     "assetBundlePatterns": [
       "**/*",

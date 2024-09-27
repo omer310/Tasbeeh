@@ -3,22 +3,18 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import axios from 'axios';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useTheme } from '@react-navigation/native';
+import moment from 'moment-hijri';
 
 const DAYS_OF_WEEK = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-const ISLAMIC_EVENTS = [
-  { name: "Islamic New Year", description: "1 Muharram", info: "Marks the beginning of the Islamic lunar calendar." },
-  { name: "Day of Ashura", description: "10 Muharram", info: "A day of fasting to commemorate the day Noah left the Ark and Moses was saved from the Egyptians by God." },
-  { name: "Mawlid al-Nabi", description: "12 Rabi' al-awwal", info: "Celebration of the birthday of Islamic prophet Muhammad." },
-  { name: "Lailat al Miraj", description: "27 Rajab", info: "Commemorates Muhammad's night journey from Mecca to Jerusalem and his ascension to heaven." },
-  { name: "Laylat al Bara'at", description: "15 Sha'ban", info: "Night of forgiveness and spiritual merit." },
-  { name: "Ramadan (start)", description: "1 Ramadan", info: "The beginning of the month of fasting." },
-  { name: "Laylat al-Qadr", description: "27 Ramadan", info: "The night when the first verses of the Quran were revealed to Muhammad." },
-  { name: "Eid al-Fitr", description: "1 Shawwal", info: "Festival of breaking the fast, marks the end of Ramadan." },
-  { name: "Day of Arafah", description: "9 Dhu al-Hijjah", info: "The holiest day in the Islamic calendar, the day before Eid al-Adha." },
-  { name: "Eid al-Adha", description: "10 Dhu al-Hijjah", info: "Festival of sacrifice, commemorates Ibrahim's willingness to sacrifice his son." },
-];
+// Helper function to parse date strings with UTC
+const parseDateStringUTC = (dateString) => {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+};
 
+// Function to normalize month names
+const normalizeMonthName = (monthName) => monthName.toLowerCase().replace(/[^a-z]/g, '');
 
 const IslamicCalendar = ({ themeColors }) => {
   const { colors } = useTheme();
@@ -28,10 +24,13 @@ const IslamicCalendar = ({ themeColors }) => {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [currentEvents, setCurrentEvents] = useState([]);
+  const [currentHijriYear, setCurrentHijriYear] = useState(null);
 
   useEffect(() => {
     fetchCalendarData();
-  }, [currentDate]);
+    updateCurrentEvents();
+  }, [currentDate, currentHijriYear]);
 
   const fetchCalendarData = async () => {
     setLoading(true);
@@ -48,10 +47,53 @@ const IslamicCalendar = ({ themeColors }) => {
       if (!selectedDate) {
         setSelectedDate(response.data.data.find(d => d.gregorian.day == currentDate.getDate()));
       }
+      // Set current Hijri year
+      if (response.data.data.length > 0) {
+        setCurrentHijriYear(parseInt(response.data.data[0].hijri.year));
+      }
     } catch (error) {
       console.error('Error fetching calendar data:', error);
     }
     setLoading(false);
+  };
+
+  const updateCurrentEvents = () => {
+    if (!currentHijriYear) return;
+
+    const dynamicEvents = generateDynamicEvents(currentHijriYear);
+    const today = moment();
+    
+    const sortedEvents = dynamicEvents.sort((a, b) => {
+      const dateA = moment(`${a.hijriYear}-${a.hijriMonth}-${a.hijriDay}`, 'iYYYY-iM-iD');
+      const dateB = moment(`${b.hijriYear}-${b.hijriMonth}-${b.hijriDay}`, 'iYYYY-iM-iD');
+      
+      if (dateA.isBefore(today) && dateB.isBefore(today)) {
+        return dateA.diff(dateB);
+      } else if (dateA.isBefore(today)) {
+        return 1;
+      } else if (dateB.isBefore(today)) {
+        return -1;
+      } else {
+        return dateA.diff(dateB);
+      }
+    });
+
+    setCurrentEvents(sortedEvents);
+  };
+
+  const generateDynamicEvents = (hijriYear) => {
+    return [
+      { name: "Islamic New Year", hijriDay: 1, hijriMonth: 1, hijriYear: hijriYear },
+      { name: "Day of Ashura", hijriDay: 10, hijriMonth: 1, hijriYear: hijriYear },
+      { name: "Mawlid al-Nabi", hijriDay: 12, hijriMonth: 3, hijriYear: hijriYear },
+      { name: "Lailat al Miraj", hijriDay: 27, hijriMonth: 7, hijriYear: hijriYear },
+      { name: "Laylat al Bara'at", hijriDay: 15, hijriMonth: 8, hijriYear: hijriYear },
+      { name: "Ramadan (start)", hijriDay: 1, hijriMonth: 9, hijriYear: hijriYear },
+      { name: "Laylat al-Qadr", hijriDay: 27, hijriMonth: 9, hijriYear: hijriYear },
+      { name: "Eid al-Fitr", hijriDay: 1, hijriMonth: 10, hijriYear: hijriYear },
+      { name: "Day of Arafah", hijriDay: 9, hijriMonth: 12, hijriYear: hijriYear },
+      { name: "Eid al-Adha", hijriDay: 10, hijriMonth: 12, hijriYear: hijriYear },
+    ];
   };
 
   const changeMonth = (increment) => {
@@ -71,38 +113,43 @@ const IslamicCalendar = ({ themeColors }) => {
   };
 
   const navigateToEventDate = (event) => {
-    const [day, month] = event.description.split(' ');
-    const eventDate = calendarData.find(date => 
-      date.hijri.day === day && date.hijri.month.en === month
-    );
-    if (eventDate) {
-      const newDate = new Date(eventDate.gregorian.date);
-      setCurrentDate(newDate);
-      setSelectedDate(eventDate);
-    }
+    const eventDate = moment(`${event.hijriYear}-${event.hijriMonth}-${event.hijriDay}`, 'iYYYY-iM-iD');
+    const gregorianDate = eventDate.toDate();
+    
+    setCurrentDate(gregorianDate);
+    setSelectedDate(null); // Reset selected date
+    fetchCalendarData(); // Fetch new calendar data for the selected month
   };
 
+  const ISLAMIC_MONTHS = [
+    'Muharram', 'Safar', 'Rabi al-awwal', 'Rabi al-thani', 'Jumada al-awwal', 'Jumada al-thani',
+    'Rajab', "Sha'ban", 'Ramadan', 'Shawwal', 'Dhu al-Qadah', 'Dhu al-Hijjah'
+  ];
+
+  // Updated isCurrentDay function
   const isCurrentDay = (date) => {
     const today = new Date();
-    return date.gregorian.day === today.getDate().toString() &&
-           date.gregorian.month.number === (today.getMonth() + 1).toString() &&
-           date.gregorian.year === today.getFullYear().toString();
+    return parseInt(date.gregorian.day, 10) === today.getUTCDate() &&
+           parseInt(date.gregorian.month.number, 10) === (today.getUTCMonth() + 1) &&
+           parseInt(date.gregorian.year, 10) === today.getUTCFullYear();
   };
 
   const isImportantDay = (date) => {
-    return ISLAMIC_EVENTS.some(event => 
-      event.description.split(' ')[0] == date.hijri.day &&
-      event.description.split(' ')[1] == date.hijri.month.en
+    return currentEvents.some(event => 
+      event.hijriDay == date.hijri.day &&
+      event.hijriMonth == date.hijri.month.number &&
+      event.hijriYear == date.hijri.year
     );
   };
 
+  // Updated renderCalendarGrid function
   const renderCalendarGrid = () => {
     if (loading || calendarData.length === 0) {
       return <Text style={[styles.loadingText, { color: colors.text }]}>Loading...</Text>;
     }
 
-    const firstDayOfMonth = new Date(calendarData[0].gregorian.date);
-    const firstDayOfWeek = firstDayOfMonth.getDay();
+    const firstDayOfMonth = parseDateStringUTC(calendarData[0].gregorian.date);
+    const firstDayOfWeek = firstDayOfMonth.getUTCDay();
     const totalDays = calendarData.length;
     const rows = Math.ceil((firstDayOfWeek + totalDays) / 7);
 
@@ -197,11 +244,13 @@ const IslamicCalendar = ({ themeColors }) => {
       </View>
       <View style={[styles.eventsContainer, { backgroundColor: colors.card }]}>
         <Text style={[styles.eventsTitle, { color: colors.text }]}>Islamic Events</Text>
-        {ISLAMIC_EVENTS.map((event, index) => (
+        {currentEvents.map((event, index) => (
           <TouchableOpacity key={index} style={styles.eventItem} onPress={() => navigateToEventDate(event)}>
             <View>
               <Text style={[styles.eventName, { color: colors.text }]}>{event.name}</Text>
-              <Text style={[styles.eventDescription, { color: '#4CAF50' }]}>{event.description}</Text>
+              <Text style={[styles.eventDescription, { color: '#4CAF50' }]}>
+                {`${event.hijriDay} ${ISLAMIC_MONTHS[event.hijriMonth - 1]} ${event.hijriYear} AH`}
+              </Text>
             </View>
             <TouchableOpacity onPress={() => handleEventInfoPress(event)}>
               <Icon name="info-outline" size={24} color="#4CAF50" />
@@ -384,5 +433,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
+
+const ISLAMIC_MONTHS = [
+  'Muharram', 'Safar', 'Rabi al-awwal', 'Rabi al-thani', 'Jumada al-awwal', 'Jumada al-thani',
+  'Rajab', "Sha'ban", 'Ramadan', 'Shawwal', 'Dhu al-Qadah', 'Dhu al-Hijjah'
+];
 
 export default IslamicCalendar;
