@@ -7,6 +7,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CustomColorPicker from './CustomColorPicker';
+import { useNavigation } from '@react-navigation/native';
+
 
 // Surah lookup table (page numbers are examples, please verify and adjust)
 const surahData = [
@@ -126,8 +128,6 @@ const surahData = [
   { name: "An-Nas", startPage: 604 }
 ];
 
-// ... existing imports and code ...
-
 function QuranReader({ navigation, themeColors }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedSurah, setSelectedSurah] = useState(null);
@@ -145,59 +145,53 @@ function QuranReader({ navigation, themeColors }) {
   const [bookmarks, setBookmarks] = useState({});
 
   useEffect(() => {
-    // Fetch surahs data from API
-    fetch('https://api.quran.com/api/v4/chapters?language=en')
-      .then(response => response.json())
-      .then(data => {
-        setSurahs(data.chapters);
-        setFilteredSurahs(data.chapters);
-      })
-      .catch(error => console.error('Error fetching surahs:', error));
+    // Fetch surahs data from API and load bookmarks
+    const fetchData = async () => {
+      try {
+        const response = await fetch('https://api.quran.com/api/v4/chapters?language=en');
+        const data = await response.json();
+        const savedBookmarks = await AsyncStorage.getItem('quranBookmarks');
+        
+        if (savedBookmarks !== null) {
+          setBookmarks(JSON.parse(savedBookmarks));
+        }
+        
+        const sortedSurahs = sortSurahs(data.chapters, JSON.parse(savedBookmarks) || {});
+        setSurahs(sortedSurahs);
+        setFilteredSurahs(sortedSurahs);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      }
+    };
 
-    // Load bookmarks when component mounts
-    loadBookmarks();
+    fetchData();
   }, []);
 
-  useEffect(() => {
-    // Re-sort surahs when bookmark changes
-    const sortedSurahs = sortSurahs([...surahs]);
-    setSurahs(sortedSurahs);
-    setFilteredSurahs(sortedSurahs);
-  }, [bookmarks]);
-
-  const loadBookmarks = async () => {
-    try {
-      const savedBookmarks = await AsyncStorage.getItem('quranBookmarks');
-      if (savedBookmarks !== null) {
-        setBookmarks(JSON.parse(savedBookmarks));
-      }
-    } catch (error) {
-      console.error('Error loading bookmarks:', error);
-    }
-  };
-
-  const saveBookmarks = async (newBookmarks) => {
-    try {
-      await AsyncStorage.setItem('quranBookmarks', JSON.stringify(newBookmarks));
-      setBookmarks(newBookmarks);
-    } catch (error) {
-      console.error('Error saving bookmarks:', error);
-    }
-  };
-
-  const sortSurahs = (surahsToSort) => {
-    return surahsToSort.sort((a, b) => {
-      const aBookmarked = Object.keys(bookmarks).some(page => 
-        page >= a.pages[0] && page <= a.pages[a.pages.length - 1]
+  const sortSurahs = (surahsToSort, currentBookmarks) => {
+    return [...surahsToSort].sort((a, b) => {
+      const aBookmarked = Object.keys(currentBookmarks).some(page => 
+        parseInt(page) >= a.pages[0] && parseInt(page) <= a.pages[a.pages.length - 1]
       );
-      const bBookmarked = Object.keys(bookmarks).some(page => 
-        page >= b.pages[0] && page <= b.pages[b.pages.length - 1]
+      const bBookmarked = Object.keys(currentBookmarks).some(page => 
+        parseInt(page) >= b.pages[0] && parseInt(page) <= b.pages[b.pages.length - 1]
       );
       
       if (aBookmarked && !bBookmarked) return -1;
       if (!aBookmarked && bBookmarked) return 1;
       return a.id - b.id;
     });
+  };
+
+  const saveBookmarks = async (newBookmarks) => {
+    try {
+      await AsyncStorage.setItem('quranBookmarks', JSON.stringify(newBookmarks));
+      setBookmarks(newBookmarks);
+      const sortedSurahs = sortSurahs(surahs, newBookmarks);
+      setSurahs(sortedSurahs);
+      setFilteredSurahs(sortedSurahs);
+    } catch (error) {
+      console.error('Error saving bookmarks:', error);
+    }
   };
 
   useEffect(() => {
@@ -220,10 +214,11 @@ function QuranReader({ navigation, themeColors }) {
   }, [currentPage]);
 
   useEffect(() => {
+    // Update filtered surahs when search query changes
     const normalizeText = (text) => {
       return text.toLowerCase()
-        .replace(/[^\w\s\u0600-\u06FF]/gi, '') // Remove special characters but keep Arabic
-        .replace(/\s+/g, ''); // Remove spaces
+        .replace(/[^\w\s\u0600-\u06FF]/gi, '')
+        .replace(/\s+/g, '');
     };
 
     const filtered = surahs.filter(surah =>
@@ -509,7 +504,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F8E9',
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 60,
+    paddingBottom: 0,
   },
   fullScreenPageContainer: {
     paddingTop: 40,
@@ -547,7 +542,7 @@ const styles = StyleSheet.create({
   },
   pageNumberContainer: {
     position: 'absolute',
-    bottom: 105,
+    bottom: 40,
     left: 0,
     right: 0,
     alignItems: 'center',

@@ -5,26 +5,11 @@ import { Magnetometer } from 'expo-sensors';
 
 const MECCA_COORDS = { latitude: 21.4225, longitude: 39.8262 };
 
-const translations = {
-  qiblaDirection: { en: 'Qibla Direction', ar: 'اتجاه القبلة' },
-  facingQibla: { en: 'You are facing the Qibla direction.', ar: 'أنت تواجه اتجاه القبلة.' },
-  turnSlightlyRight: { en: 'Turn slightly to your right to face the Qibla.', ar: 'انعطف قليلاً إلى يمينك لمواجهة القبلة.' },
-  turnSlightlyLeft: { en: 'Turn slightly to your left to face the Qibla.', ar: 'انعطف قليلاً إلى يسارك لمواجهة القبلة.' },
-  turnRight: { en: 'Turn to your right to face the Qibla.', ar: 'انعطف إلى يمينك لمواجهة القبلة.' },
-  turnLeft: { en: 'Turn to your left to face the Qibla.', ar: 'انعطف إلى يسارك لمواجهة القبلة.' },
-  calculating: { en: 'Calculating Qibla direction...', ar: 'جاري حساب اتجاه القبلة...' },
-  locationDenied: { en: 'Permission to access location was denied', ar: 'تم رفض إذن الوصول إلى الموقع' },
-};
-
-export default function QiblaDirection({ themeColors, language }) {
+export default function QiblaDirection({ themeColors }) {
   const [qiblaDirection, setQiblaDirection] = useState(null);
   const [compassHeading, setCompassHeading] = useState(0);
   const [userLocation, setUserLocation] = useState(null);
   const [error, setError] = useState(null);
-
-  const getTranslatedText = (key) => {
-    return translations[key][language] || key;
-  };
 
   useEffect(() => {
     let magnetometerSubscription;
@@ -83,23 +68,23 @@ export default function QiblaDirection({ themeColors, language }) {
 
   const getInstruction = (angleDifference, rotationDiff) => {
     if (angleDifference < 10) {
-      return getTranslatedText('facingQibla');
+      return 'Facing Qibla';
     } else {
       const direction = rotationDiff > 0 ? 'right' : 'left';
       if (angleDifference < 45) {
-        return getTranslatedText(direction === 'right' ? 'turnSlightlyRight' : 'turnSlightlyLeft');
+        return `Turn slightly ${direction}`;
       } else {
-        return getTranslatedText(direction === 'right' ? 'turnRight' : 'turnLeft');
+        return `Turn ${direction}`;
       }
     }
   };
 
   if (error) {
-    return <Text style={[styles.error, { color: themeColors.textColor }]}>{getTranslatedText('locationDenied')}</Text>;
+    return <Text style={[styles.error, { color: themeColors.textColor }]}>Location access denied</Text>;
   }
 
   if (qiblaDirection === null || userLocation === null) {
-    return <Text style={[styles.loading, { color: themeColors.textColor }]}>{getTranslatedText('calculating')}</Text>;
+    return <Text style={[styles.loading, { color: themeColors.textColor }]}>Calculating...</Text>;
   }
 
   const rotation = (qiblaDirection - compassHeading + 360) % 360;
@@ -122,7 +107,7 @@ export default function QiblaDirection({ themeColors, language }) {
       resizeMode="cover"
     >
       <View style={styles.container}>
-        <Text style={[styles.title, { color: themeColors.textColor }]}>{getTranslatedText('qiblaDirection')}</Text>
+        <Text style={[styles.title, { color: themeColors.textColor }]}>Qibla Direction</Text>
         <View style={styles.compassContainer}>
           <Image
             source={require('../assets/qibla-compass.png')}

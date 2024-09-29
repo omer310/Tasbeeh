@@ -1,13 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Animated, ScrollView, Dimensions, I18nManager, TextInput, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Animated, ScrollView, Dimensions, I18nManager, TextInput, Modal, Vibration } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 
 const { width, height } = Dimensions.get('window');
 
-// Set the layout direction to RTL for Arabic
-I18nManager.forceRTL(true);
 
-const TasbeehCounter = ({ themeColors, language = 'ar' }) => {
+
+const TasbeehCounter = ({ themeColors, language = 'en' }) => {
   const [adhkars, setAdhkars] = useState({
     'سبحان الله وبحمده': { ar: 'سبحان الله وبحمده', en: 'Glory and praise be to Allah', count: 0, goal: 0 },
     'الحمد لله': { ar: 'الحمد لله', en: 'Praise be to Allah', count: 0, goal: 0 },
@@ -163,13 +162,18 @@ const TasbeehCounter = ({ themeColors, language = 'ar' }) => {
     },
     addButton: {
       backgroundColor: themeColors.primary,
-      padding: 10,
+      padding: '2%',
       borderRadius: 5,
-      marginTop: 10,
+      marginTop: '7%',
+      minWidth: '20%',
+      maxWidth: '40%',
+      alignSelf: 'center',
+      flexGrow: 1,
     },
     addButtonText: {
       color: themeColors.white,
       fontWeight: 'bold',
+      textAlign: 'center',
     },
     modalInput: {
       borderWidth: 1,
@@ -179,9 +183,28 @@ const TasbeehCounter = ({ themeColors, language = 'ar' }) => {
       marginBottom: 10,
       color: themeColors.textColor,
     },
+    goalContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    goalText: {
+      color: themeColors.textColor,
+      marginRight: 10,
+    },
+    cancelGoalButton: {
+      padding: 5,
+    },
   });
 
   const incrementCount = () => {
+    const currentAdhkar = adhkars[selectedAdhkar];
+    if (currentAdhkar.goal > 0 && currentAdhkar.count >= currentAdhkar.goal) {
+      // Goal reached, don't increment or vibrate
+      return;
+    }
+
+    Vibration.vibrate([0, 100, 50, 100]);  // Stronger vibration pattern
     setAdhkars(prev => ({
       ...prev,
       [selectedAdhkar]: {
@@ -189,6 +212,14 @@ const TasbeehCounter = ({ themeColors, language = 'ar' }) => {
         count: prev[selectedAdhkar].count + 1
       }
     }));
+
+    // Check if the goal is reached after incrementing
+    if (currentAdhkar.goal > 0 && currentAdhkar.count + 1 === currentAdhkar.goal) {
+      // Goal reached, you can add additional feedback here if desired
+      // For example, a different vibration pattern or a sound
+      Vibration.vibrate([0, 200, 100, 200, 100, 200]);  // Longer vibration to indicate goal reached
+      setGoalReached(true);
+    }
   };
 
   const resetCount = () => {
@@ -199,6 +230,7 @@ const TasbeehCounter = ({ themeColors, language = 'ar' }) => {
         count: 0
       }
     }));
+    setGoalReached(false);
   };
 
   const toggleBottomSheet = () => {
@@ -333,7 +365,7 @@ const TasbeehCounter = ({ themeColors, language = 'ar' }) => {
             ))}
           </ScrollView>
           <TouchableOpacity style={styles.addButton} onPress={openAddAdhkarModal}>
-            <Text style={styles.addButtonText}>{language === 'ar' ? 'إضافة ذكر جديد' : 'Add New Adhkar'}</Text>
+            <Text style={styles.addButtonText}>{language === 'ar' ? 'إضافة ذكر جديد' : 'Add New Dhikr'}</Text>
           </TouchableOpacity>
         </Animated.View>
 

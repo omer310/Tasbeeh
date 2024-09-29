@@ -163,6 +163,14 @@ const PrayerTimes = ({ themeColors, language }) => {
     const isNext = nextPrayer === prayer;
     const iconSource = getPrayerIcon(prayer);
 
+    // Convert to 12-hour format
+    const convertTo12Hour = (time) => {
+      const [hours, minutes] = time.split(':').map(Number);
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const adjustedHours = hours % 12 || 12;
+      return `${adjustedHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+    };
+
     return (
       <TouchableOpacity 
         key={prayer}
@@ -194,14 +202,14 @@ const PrayerTimes = ({ themeColors, language }) => {
             </Text>
             {prayer === 'Fajr' && (
               <Text style={[styles.sunriseTime, { color: themeColors.secondaryTextColor }]}>
-                {getTranslatedText('sunrise')} {prayerTimes['Sunrise']}
+                {getTranslatedText('sunrise')} {convertTo12Hour(prayerTimes['Sunrise'])}
               </Text>
             )}
           </View>
         </View>
         <View style={styles.prayerTimeContainer}>
           <Text style={[styles.prayerTime, { color: themeColors.activeTabColor }]}>
-            {prayerTimes[prayer]}
+            {convertTo12Hour(prayerTimes[prayer])}
           </Text>
           {isNext && (
             <View style={styles.nextIndicator}>
