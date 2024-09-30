@@ -3,9 +3,33 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground, 
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import * as Location from 'expo-location';
-import PrayerTimeSettings from './PrayerTimeSettings';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import * as TaskManager from 'expo-task-manager';
+import { Audio } from 'expo-av';
+import PrayerTimeSettings from './PrayerTimeSettings';
 import AdhanPreferenceModel from './AdhanPreferencesModal';
+
+const BACKGROUND_NOTIFICATION_TASK = 'BACKGROUND-NOTIFICATION-TASK';
+
+TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error, executionInfo }) => {
+  if (error) {
+    console.error("Background task failed:", error);
+    return;
+  }
+  if (data) {
+    const { prayerName, adhanSound } = data;
+    await schedulePrayerNotification(prayerName, adhanSound);
+  }
+});
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 const PrayerTimes = ({ themeColors, language }) => {
   const [prayerTimes, setPrayerTimes] = useState(null);
@@ -22,6 +46,8 @@ const PrayerTimes = ({ themeColors, language }) => {
   const [adhanModalVisible, setAdhanModalVisible] = useState(false);
   const [nextPrayer, setNextPrayer] = useState(null);
   const [countdown, setCountdown] = useState('');
+  const [notificationListener, setNotificationListener] = useState(null);
+  const [responseListener, setResponseListener] = useState(null);
 
   // Add translations
   const translations = {
@@ -72,6 +98,32 @@ const PrayerTimes = ({ themeColors, language }) => {
         }
       }, 1000);
       return () => clearInterval(timer);
+    }
+  }, [prayerTimes]);
+
+  useEffect(() => {
+    registerForPushNotificationsAsync();
+    
+    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+      console.log('Notification received:', notification);
+    });
+    
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('Notification response received:', response);
+    });
+
+    setNotificationListener(notificationListener);
+    setResponseListener(responseListener);
+
+    return () => {
+      Notifications.removeNotificationSubscription(notificationListener);
+      Notifications.removeNotificationSubscription(responseListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (prayerTimes) {
+      schedulePrayerNotifications();
     }
   }, [prayerTimes]);
 
@@ -162,6 +214,7 @@ const PrayerTimes = ({ themeColors, language }) => {
     if (!prayerTimes) return null;
     const isNext = nextPrayer === prayer;
     const iconSource = getPrayerIcon(prayer);
+    
 
     // Convert to 12-hour format
     const convertTo12Hour = (time) => {
@@ -245,6 +298,99 @@ const PrayerTimes = ({ themeColors, language }) => {
     }
   };
 
+  const schedulePrayerNotifications = async () => {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    
+    const prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+    for (let prayer of prayers) {
+      const [hours, minutes] = prayerTimes[prayer].split(':').map(Number);
+      const prayerDate = new Date();
+      prayerDate.setHours(hours, minutes, 0);
+      
+      if (prayerDate > new Date()) {
+        const adhanPreference = await AsyncStorage.getItem(`adhan_${prayer}`);
+        let notificationContent = {
+          title: `Time for ${prayer} Prayer`,
+          body: `It's time to pray ${prayer}. The prayer time is ${prayerTimes[prayer]}.`,
+          data: { prayer, adhanPreference },
+        };
+
+        if (adhanPreference === 'None') {
+          continue; // Skip this prayer notification
+        } else if (adhanPreference === 'Silent') {
+          notificationContent.sound = null;
+        } else if (adhanPreference === 'Default notification sound') {
+          // Use default notification sound
+        } else {
+          // For custom adhan sounds, we'll use a custom sound
+          notificationContent.sound = adhanPreference;
+        }
+        
+        await Notifications.scheduleNotificationAsync({
+          content: notificationContent,
+          trigger: {
+            date: prayerDate,
+          },
+        });
+      }
+    }
+  };
+
+  const playAdhan = async (adhanPreference) => {
+    let soundFile;
+    switch (adhanPreference) {
+      case 'Adhan (Nureyn Mohammad)':
+        soundFile = require('../assets/adhan.mp3');
+        break;
+      case 'Adhan (Madina)':
+        soundFile = require('../assets/madinah_adhan.mp3');
+        break;
+      case 'Adhan (Makka)':
+        soundFile = require('../assets/makkah_adhan.mp3');
+        break;
+      case 'Long beep':
+        soundFile = require('../assets/long_beep.mp3');
+        break;
+      default:
+        return; // Don't play anything for other options
+    }
+
+    const { sound } = await Audio.Sound.createAsync(soundFile);
+    await sound.playAsync();
+  };
+
+  useEffect(() => {
+    const backgroundSubscription = Notifications.addNotificationReceivedListener(notification => {
+      const { adhanPreference } = notification.request.content.data;
+      if (adhanPreference && adhanPreference !== 'None' && adhanPreference !== 'Silent' && adhanPreference !== 'Default notification sound') {
+        playAdhan(adhanPreference);
+      }
+    });
+
+    return () => {
+      backgroundSubscription.remove();
+    };
+  }, []);
+
+  const registerForPushNotificationsAsync = async () => {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') {
+      alert('Failed to get push token for push notification!');
+      return;
+    }
+  };
+
+  const handleAdhanPreferenceChange = async (prayer, preference) => {
+    await AsyncStorage.setItem(`adhan_${prayer}`, preference);
+    // Reschedule notifications with new preferences
+    schedulePrayerNotifications();
+  };
+
   return (
     <ImageBackground 
       source={require('../assets/islamic-pattern2.png')} 
@@ -286,6 +432,7 @@ const PrayerTimes = ({ themeColors, language }) => {
           prayer={selectedPrayer}
           themeColors={themeColors}
           language={language}
+          onPreferenceChange={handleAdhanPreferenceChange}
         />
       </View>
     </ImageBackground>

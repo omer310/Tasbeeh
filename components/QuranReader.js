@@ -501,13 +501,13 @@ const styles = StyleSheet.create({
   },
   pageContainer: {
     flex: 1,
-    backgroundColor: '#F1F8E9',
+    backgroundColor: '#F8F9FB',
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 0,
   },
   fullScreenPageContainer: {
-    paddingTop: 40,
+    paddingTop: 60,
   },
   headerContainer: {
     flexDirection: 'row',
@@ -593,7 +593,7 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 28,
     fontWeight: 'bold',
-    marginBottom: 15,
+    marginBottom: 10,
   },
   searchContainer: {
     flexDirection: 'row',

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Image, Ani
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 
-const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors }) => {
+const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPreferenceChange }) => {
   const [selectedAdhan, setSelectedAdhan] = useState('Adhan (Madina)');
   const [animation] = useState(new Animated.Value(0));
   const [sound, setSound] = useState();
@@ -95,6 +95,11 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors }) => {
     onClose();
   };
 
+  const handleAdhanSelection = (option) => {
+    setSelectedAdhan(option.name);
+    onPreferenceChange(prayer, option.name);
+  };
+
   return (
     <Modal
       animationType="none"
@@ -140,7 +145,7 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors }) => {
                   selectedAdhan === option.name && styles.selectedOption,
                   { backgroundColor: selectedAdhan === option.name ? themeColors.activeTabColor + '20' : 'transparent' }
                 ]}
-                onPress={() => setSelectedAdhan(option.name)}
+                onPress={() => handleAdhanSelection(option)}
               >
                 <View style={styles.optionLeft}>
                   {option.image ? (

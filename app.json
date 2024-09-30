@@ -29,7 +29,10 @@
       "permissions": [
         "NOTIFICATIONS",
         "android.permission.VIBRATE",
-        "android.permission.INTERNET"
+        "android.permission.INTERNET",
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM",
+        "FOREGROUND_SERVICE"
       ],
       "package": "com.omer310.TasbeehApp",
       "useNextNotificationsApi": true

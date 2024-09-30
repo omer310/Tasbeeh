@@ -225,7 +225,7 @@ export default function App() {
 
   // Create a themeColors object based on the dark mode state
   const themeColors = {
-    backgroundColor: darkMode ? '#1E1E1E' : '#E8F5E9',
+    backgroundColor: darkMode ? '#1E1E1E' : '#F8F9FB',
     textColor: darkMode ? '#FFFFFF' : '#1B5E20',
     tabBarColor: darkMode ? '#2E2E2E' : '#FFFFFF',
     activeTabColor: '#4CAF50',

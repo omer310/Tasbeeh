@@ -78,7 +78,7 @@ const Settings = ({ darkMode, toggleDarkMode, theme, changeTheme, themeColors, s
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+    padding: 32,
   },
   title: {
     fontSize: 28,

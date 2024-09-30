@@ -212,12 +212,12 @@ const Duas = ({ route, navigation }) => {
 
   const renderHomePage = () => (
     <ImageBackground 
-      source={require('../assets/dome-icon.png')} 
+      source={require('../assets/Dome-icon4.png')} 
       style={styles.backgroundImage}
       imageStyle={styles.backgroundImageStyle}
     >
       <ImageBackground
-        source={require('../assets/Overlay.png')}
+        // source={require('../assets/Overlay.png')}
         style={styles.overlayImage}
         imageStyle={styles.overlayImageStyle}
       >
@@ -364,25 +364,23 @@ const styles = StyleSheet.create({
   },
   backgroundImage: {
     flex: 1,
-    resizeMode: 'cover',
-    height: '50%',
+    resizeMode: 'stretch',
+    height: '20%',
     width: '100%',
   },
   backgroundImageStyle: {
     opacity: 0.9,
-    height: '40%',
+    height: '100',
   },
   overlayImage: {
-    flex: 3,
+    flex: 1,
   },
   overlayImageStyle: {
     resizeMode: 'stretch',
     height: '50%',
     width: '100%',
-    flex: 1,
-    position: 'absolute',
     top: 0,
-    bottom: 5,
+    bottom: 0,
     left: 0,
     right: 0,
   },
