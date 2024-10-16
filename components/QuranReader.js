@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, Dimensions, SafeAreaView, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, Dimensions, SafeAreaView, ActivityIndicator, TextInput, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import quranImages from './quranImages';
@@ -8,6 +8,7 @@ import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CustomColorPicker from './CustomColorPicker';
 import { useNavigation } from '@react-navigation/native';
+import { Switch } from 'react-native';
 
 
 // Surah lookup table (page numbers are examples, please verify and adjust)
@@ -143,6 +144,8 @@ function QuranReader({ navigation, themeColors }) {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [selectedColor, setSelectedColor] = useState('#FF9800');
   const [bookmarks, setBookmarks] = useState({});
+  const [isEnglishVersion, setIsEnglishVersion] = useState(false);
+  const [englishPages, setEnglishPages] = useState({});
 
   useEffect(() => {
     // Fetch surahs data from API and load bookmarks
@@ -166,6 +169,52 @@ function QuranReader({ navigation, themeColors }) {
 
     fetchData();
   }, []);
+
+  useEffect(() => {
+    // Fetch English translation when isEnglishVersion is true
+    if (isEnglishVersion) {
+      fetchEnglishTranslation();
+    }
+  }, [isEnglishVersion]);
+
+  const fetchEnglishTranslation = async () => {
+    try {
+      const response = await fetch('https://api.quran.com/api/v4/quran/translations/131');
+      const data = await response.json();
+      console.log('API Response:', JSON.stringify(data, null, 2));
+
+      if (!data.translations || !Array.isArray(data.translations)) {
+        console.error('Unexpected API response structure:', data);
+        return;
+      }
+
+      const formattedPages = {};
+      data.translations.forEach((verse, index) => {
+        if (!verse || typeof verse.text !== 'string') {
+          console.error(`Invalid verse data at index ${index}:`, verse);
+          return;
+        }
+
+        // Calculate page number (adjust this calculation as needed)
+        const pageNumber = Math.floor(index / 7) + 1;
+        
+        if (!formattedPages[pageNumber]) {
+          formattedPages[pageNumber] = [];
+        }
+        
+        formattedPages[pageNumber].push({
+          verseNumber: index + 1,
+          text: verse.text
+        });
+      });
+
+      setEnglishPages(formattedPages);
+      console.log('English translation fetched:', Object.keys(formattedPages).length, 'pages');
+    } catch (error) {
+      console.error('Error fetching English translation:', error);
+      console.error('Error details:', error.message, error.stack);
+    }
+  };
 
   const sortSurahs = (surahsToSort, currentBookmarks) => {
     return [...surahsToSort].sort((a, b) => {
@@ -313,7 +362,9 @@ function QuranReader({ navigation, themeColors }) {
           <Text style={styles.surahNumber}>{item.id}</Text>
         </LinearGradient>
         <View style={styles.surahInfoContainer}>
-          <Text style={[styles.surahName, { color: themeColors.textColor }]}>{item.name_simple}</Text>
+          <Text style={[styles.surahName, { color: themeColors.textColor }]}>
+            {isEnglishVersion ? item.translated_name.name : item.name_simple}
+          </Text>
           <Text style={[styles.surahArabicName, { color: themeColors.textColor }]}>{item.name_arabic}</Text>
           <Text style={[styles.surahDetails, { color: themeColors.secondaryTextColor }]}>
             Page {item.pages[0]} • {item.verses_count} verses • {item.revelation_place}
@@ -329,23 +380,51 @@ function QuranReader({ navigation, themeColors }) {
   const renderQuranPage = () => (
     <View style={[
       styles.pageContainer,
-      focusMode && styles.fullScreenPageContainer
+      focusMode && styles.fullScreenPageContainer,
+      { backgroundColor: themeColors.backgroundColor }
     ]}>
       <View style={styles.headerContainer}>
-        <Text style={styles.headerText}>{currentSurah}</Text>
-        <Text style={styles.headerText}>Juz {currentJuz}</Text>
+        <Text style={[styles.headerText, { color: themeColors.textColor }]}>{currentSurah}</Text>
+        <Text style={[styles.headerText, { color: themeColors.textColor }]}>Juz {currentJuz}</Text>
       </View>
       <View style={styles.imageContainer}>
-        <Image
-          style={styles.pageImage}
-          source={quranImages[currentPage] || quranImages[1]}
-          resizeMode="contain"
-          onLoadStart={() => setIsLoading(true)}
-          onLoadEnd={() => setIsLoading(false)}
-        />
+        {isEnglishVersion ? (
+          <ScrollView 
+            style={styles.englishTextContainer}
+            contentContainerStyle={styles.englishTextContentContainer}
+          >
+            {englishPages[currentPage] ? (
+              englishPages[currentPage].map((verse, index) => (
+                <View key={index} style={[
+                  styles.englishVerseContainer,
+                  { backgroundColor: themeColors.cardBackground }
+                ]}>
+                  <Text style={[styles.englishVerseNumber, { color: themeColors.accentColor }]}>
+                    {verse.verseNumber}
+                  </Text>
+                  <Text style={[styles.englishVerseText, { color: themeColors.textColor }]}>
+                    {verse.text}
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <Text style={[styles.loadingText, { color: themeColors.textColor }]}>
+                Loading translation...
+              </Text>
+            )}
+          </ScrollView>
+        ) : (
+          <Image
+            style={styles.pageImage}
+            source={quranImages[currentPage] || quranImages[1]}
+            resizeMode="contain"
+            onLoadStart={() => setIsLoading(true)}
+            onLoadEnd={() => setIsLoading(false)}
+          />
+        )}
         {isLoading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#8B4513" />
+            <ActivityIndicator size="large" color={themeColors.accentColor} />
           </View>
         )}
       </View>
@@ -412,6 +491,16 @@ function QuranReader({ navigation, themeColors }) {
               <View style={[styles.surahList, { backgroundColor: themeColors.backgroundColor + '80' }]}>
                 <View style={styles.surahListHeader}>
                   <Text style={[styles.heading, { color: themeColors.textColor }]}>Contents</Text>
+                  <View style={styles.languageToggleContainer}>
+                    <Text style={[styles.languageText, { color: themeColors.textColor }]}>Arabic</Text>
+                    <Switch
+                      value={isEnglishVersion}
+                      onValueChange={setIsEnglishVersion}
+                      trackColor={{ false: themeColors.gradientStart, true: themeColors.gradientEnd }}
+                      thumbColor={isEnglishVersion ? themeColors.gradientStart : themeColors.gradientEnd}
+                    />
+                    <Text style={[styles.languageText, { color: themeColors.textColor }]}>English</Text>
+                  </View>
                   <View style={[styles.searchContainer, { backgroundColor: themeColors.inputBackground }]}>
                     <Ionicons name="search" size={20} color={themeColors.textColor} style={styles.searchIcon} />
                     <TextInput
@@ -675,6 +764,46 @@ const styles = StyleSheet.create({
   closeColorPickerText: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  languageToggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  languageText: {
+    fontSize: 14,
+    marginHorizontal: 10,
+  },
+  englishTextContainer: {
+    flex: 1,
+    width: width - 32, // Adjust based on your padding
+  },
+  englishTextContentContainer: {
+    paddingVertical: 20,
+  },
+  englishVerseContainer: {
+    marginBottom: 15,
+    padding: 10,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  englishVerseNumber: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginRight: 10,
+    minWidth: 25,
+  },
+  englishVerseText: {
+    fontSize: 16,
+    lineHeight: 24,
+    flex: 1,
+  },
+  loadingText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 20,
   },
 });
 
