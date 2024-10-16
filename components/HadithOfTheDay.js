@@ -107,7 +107,7 @@ export default function HadithOfTheDay({ themeColors, language }) {
   };
 
   const renderHadith = useCallback(({ item }) => (
-    <View style={styles.hadithContainer}>
+    <View style={[styles.hadithContainer, { backgroundColor: themeColors.backgroundColor }]}>
       <Text style={[styles.hadithText, { color: themeColors.textColor }]}>{item.engText}</Text>
       <Text style={[styles.arabicText, { color: themeColors.textColor }]}>{item.araText}</Text>
       <Text style={[styles.hadithReference, { color: themeColors.secondaryTextColor }]}>
@@ -134,14 +134,14 @@ export default function HadithOfTheDay({ themeColors, language }) {
       <Text style={[styles.title, { color: themeColors.textColor }]}>{getTranslatedText('hadithSearch')}</Text>
       <View style={styles.searchContainer}>
         <TextInput
-          style={[styles.searchInput, { color: themeColors.textColor, borderColor: themeColors.textColor }]}
+          style={[styles.searchInput, { color: themeColors.textColor, borderColor: themeColors.textColor, backgroundColor: themeColors.inputBackground }]}
           placeholder={getTranslatedText('searchPlaceholder')}
           placeholderTextColor={themeColors.secondaryTextColor}
           value={searchTerm}
           onChangeText={onChangeSearchTerm}
         />
-        <TouchableOpacity style={styles.button} onPress={onPressSearch}>
-          <Text style={styles.buttonText}>{getTranslatedText('search')}</Text>
+        <TouchableOpacity style={[styles.button, { backgroundColor: themeColors.primary }]} onPress={onPressSearch}>
+          <Text style={[styles.buttonText, { color: themeColors.backgroundColor }]}>{getTranslatedText('search')}</Text>
         </TouchableOpacity>
       </View>
       <TouchableOpacity 
@@ -154,8 +154,8 @@ export default function HadithOfTheDay({ themeColors, language }) {
             : EDITIONS.find(e => e.value === selectedEdition).label}
         </Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.button} onPress={onPressRandom}>
-        <Text style={styles.buttonText}>{getTranslatedText('getRandomHadith')}</Text>
+      <TouchableOpacity style={[styles.button, { backgroundColor: themeColors.primary }]} onPress={onPressRandom}>
+        <Text style={[styles.buttonText, { color: themeColors.backgroundColor }]}>{getTranslatedText('getRandomHadith')}</Text>
       </TouchableOpacity>
     </View>
   ), [themeColors, searchTerm, selectedEdition, language, onChangeSearchTerm, onPressSearch, onPressRandom]);
@@ -190,10 +190,10 @@ export default function HadithOfTheDay({ themeColors, language }) {
             </TouchableOpacity>
           ))}
           <TouchableOpacity
-            style={[styles.closeButton, { backgroundColor: colors.primary }]}
+            style={[styles.closeButton, { backgroundColor: themeColors.primary }]}
             onPress={() => setPickerVisible(false)}
           >
-            <Text style={styles.closeButtonText}>{getTranslatedText('close')}</Text>
+            <Text style={[styles.closeButtonText, { color: themeColors.backgroundColor }]}>{getTranslatedText('close')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -210,7 +210,7 @@ export default function HadithOfTheDay({ themeColors, language }) {
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator size="large" color={colors.primary} />
+            <ActivityIndicator size="large" color={themeColors.primary} />
           ) : error ? (
             <Text style={[styles.error, { color: themeColors.textColor }]}>{error}</Text>
           ) : (
@@ -227,7 +227,6 @@ export default function HadithOfTheDay({ themeColors, language }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   header: {
     padding: 20,
@@ -248,25 +247,21 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     height: 40,
-    borderColor: colors.border,
     borderWidth: 1,
     borderRadius: 5,
     paddingHorizontal: 10,
     marginRight: 10,
   },
   button: {
-    backgroundColor: colors.primary,
     padding: 10,
     borderRadius: 5,
     alignItems: 'center',
     marginBottom: 10,
   },
   buttonText: {
-    color: colors.white,
     fontWeight: 'bold',
   },
   hadithContainer: {
-    backgroundColor: colors.white,
     padding: 20,
     borderRadius: 20,
     marginTop: 20,
@@ -282,26 +277,22 @@ const styles = StyleSheet.create({
   hadithText: {
     fontSize: 16,
     lineHeight: 24,
-    color: colors.text,
     marginBottom: 10,
   },
   arabicText: {
     fontSize: 18,
     lineHeight: 30,
-    color: colors.text,
     marginBottom: 10,
     textAlign: 'right',
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
   hadithReference: {
     fontSize: 14,
-    color: colors.text,
     fontStyle: 'italic',
     textAlign: 'right',
   },
   error: {
     fontSize: 16,
-    color: colors.error,
     textAlign: 'center',
     marginTop: 20,
   },
@@ -349,7 +340,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   closeButtonText: {
-    color: colors.white,
     fontSize: 16,
     fontWeight: 'bold',
   },

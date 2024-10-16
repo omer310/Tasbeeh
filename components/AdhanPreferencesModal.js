@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Image, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPreferenceChange }) => {
   const [selectedAdhan, setSelectedAdhan] = useState('Adhan (Madina)');
@@ -9,6 +10,29 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPref
   const [sound, setSound] = useState();
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingAdhan, setPlayingAdhan] = useState(null);
+
+  useEffect(() => {
+    loadPreference();
+  }, [prayer]);
+
+  const loadPreference = async () => {
+    try {
+      const savedPreference = await AsyncStorage.getItem(`adhan_preference_${prayer}`);
+      if (savedPreference !== null) {
+        setSelectedAdhan(savedPreference);
+      }
+    } catch (error) {
+      console.error('Error loading preference:', error);
+    }
+  };
+
+  const savePreference = async (preference) => {
+    try {
+      await AsyncStorage.setItem(`adhan_preference_${prayer}`, preference);
+    } catch (error) {
+      console.error('Error saving preference:', error);
+    }
+  };
 
   useEffect(() => {
     if (isVisible) {
@@ -98,6 +122,7 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPref
   const handleAdhanSelection = (option) => {
     setSelectedAdhan(option.name);
     onPreferenceChange(prayer, option.name);
+    savePreference(option.name);
   };
 
   return (

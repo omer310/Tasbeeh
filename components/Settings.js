@@ -2,15 +2,22 @@ import React from 'react';
 import { View, Text, Switch, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { Ionicons } from '@expo/vector-icons';
 
-const Settings = ({ darkMode, toggleDarkMode, theme, changeTheme, themeColors, selectedFont, changeFont }) => {
+const Settings = ({ darkMode, toggleDarkMode, theme, changeTheme, themeColors, selectedFont, changeFont, language, changeLanguage }) => {
   const fontOptions = ['Scheherazade', 'Amiri', 'Lateef'];
+  const languageOptions = [
+    { label: 'English', value: 'en' },
+    { label: 'العربية', value: 'ar' }
+  ];
 
-  const renderSettingItem = (label, component, icon) => (
+  const renderSettingItem = (labelEn, labelAr, component, icon) => (
     <View style={styles.settingItem}>
       <View style={styles.settingLabelContainer}>
         <Icon name={icon} size={24} color={themeColors.primary} style={styles.settingIcon} />
-        <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>{label}</Text>
+        <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>
+          {language === 'ar' ? labelAr : labelEn}
+        </Text>
       </View>
       {component}
     </View>
@@ -18,10 +25,12 @@ const Settings = ({ darkMode, toggleDarkMode, theme, changeTheme, themeColors, s
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: themeColors.backgroundColor }]}>
-      <Text style={[styles.title, { color: themeColors.textColor }]}>Settings</Text>
+      <Text style={[styles.title, { color: themeColors.textColor }]}>
+        {language === 'ar' ? 'الإعدادات' : 'Settings'}
+      </Text>
       
       <View style={styles.card}>
-        {renderSettingItem('Dark Mode', 
+        {renderSettingItem('Dark Mode', 'الوضع الداكن', 
           <Switch
             value={darkMode}
             onValueChange={toggleDarkMode}
@@ -31,22 +40,22 @@ const Settings = ({ darkMode, toggleDarkMode, theme, changeTheme, themeColors, s
           'brightness-6'
         )}
 
-        {renderSettingItem('Theme',
+        {renderSettingItem('Theme', 'السمة',
           <View style={styles.pickerContainer}>
             <Picker
               selectedValue={theme}
               style={[styles.picker, { color: themeColors.textColor }]}
               onValueChange={(itemValue) => changeTheme(itemValue)}
             >
-              <Picker.Item label="Default" value="default" />
-              <Picker.Item label="Nature" value="nature" />
-              <Picker.Item label="Ocean" value="ocean" />
+              <Picker.Item label={language === 'ar' ? 'افتراضي' : 'Default'} value="default" />
+              <Picker.Item label={language === 'ar' ? 'طبيعة' : 'Nature'} value="nature" />
+              <Picker.Item label={language === 'ar' ? 'محيط' : 'Ocean'} value="ocean" />
             </Picker>
           </View>,
           'palette'
         )}
 
-        {renderSettingItem('Arabic Font',
+        {renderSettingItem('Arabic Font', 'الخط العربي',
           <View style={styles.pickerContainer}>
             <Picker
               selectedValue={selectedFont}
@@ -60,6 +69,21 @@ const Settings = ({ darkMode, toggleDarkMode, theme, changeTheme, themeColors, s
           </View>,
           'font-download'
         )}
+
+        {renderSettingItem('Language', 'اللغة',
+          <View style={styles.pickerContainer}>
+            <Picker
+              selectedValue={language}
+              style={[styles.picker, { color: themeColors.textColor }]}
+              onValueChange={(itemValue) => changeLanguage(itemValue)}
+            >
+              {languageOptions.map((option) => (
+                <Picker.Item key={option.value} label={option.label} value={option.value} />
+              ))}
+            </Picker>
+          </View>,
+          'language'
+        )}
       </View>
 
       <TouchableOpacity
@@ -68,7 +92,7 @@ const Settings = ({ darkMode, toggleDarkMode, theme, changeTheme, themeColors, s
       >
         <Icon name="refresh" size={24} color={themeColors.backgroundColor} />
         <Text style={[styles.resetButtonText, { color: themeColors.backgroundColor }]}>
-          Reset to Default
+          {language === 'ar' ? 'إعادة التعيين إلى الافتراضي' : 'Reset to Default'}
         </Text>
       </TouchableOpacity>
     </ScrollView>
@@ -106,6 +130,10 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   settingLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  settingText: {
     fontSize: 16,
     fontWeight: '500',
   },

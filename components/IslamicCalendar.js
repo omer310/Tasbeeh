@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, SafeAreaView, ScrollView } from 'react-native';
 import axios from 'axios';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useTheme } from '@react-navigation/native';
@@ -24,7 +24,7 @@ const IslamicCalendar = ({ themeColors }) => {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [currentEvents, setCurrentEvents] = useState([]);
+  const [currentEvents, setCurrentEvents] = useState([]); 
   const [currentHijriYear, setCurrentHijriYear] = useState(null);
 
   useEffect(() => {
@@ -159,9 +159,10 @@ const IslamicCalendar = ({ themeColors }) => {
     for (let i = 0; i < rows; i++) {
       let row = [];
       for (let j = 0; j < 7; j++) {
-        if ((i === 0 && j < firstDayOfWeek) || dayCounter >= totalDays) {
+        if (i === 0 && j < firstDayOfWeek) {
+          // Add empty cells for days before the first day of the month
           row.push(<View key={`empty-${i}-${j}`} style={styles.emptyDay} />);
-        } else {
+        } else if (dayCounter < totalDays) {
           const date = calendarData[dayCounter];
           const isToday = isCurrentDay(date);
           const isImportant = isImportantDay(date);
@@ -186,6 +187,9 @@ const IslamicCalendar = ({ themeColors }) => {
             </TouchableOpacity>
           );
           dayCounter++;
+        } else {
+          // Add empty cells for days after the last day of the month
+          row.push(<View key={`empty-end-${i}-${j}`} style={styles.emptyDay} />);
         }
       }
       days.push(<View key={`row-${i}`} style={styles.week}>{row}</View>);
@@ -213,7 +217,7 @@ const IslamicCalendar = ({ themeColors }) => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: themeColors.backgroundColor }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.backgroundColor }]}>
       <View style={[styles.header, { backgroundColor: colors.card }]}>
         <TouchableOpacity onPress={() => {}}>
           <Icon name="arrow-back" size={24} color={colors.text} />
@@ -223,41 +227,43 @@ const IslamicCalendar = ({ themeColors }) => {
           <Text style={[styles.headerSubtitle, { color: colors.text }]}>{getSubHeaderDate()}</Text>
         </View>
       </View>
-      <View style={[styles.calendarContainer, { backgroundColor: colors.card }]}>
-        <View style={styles.monthNavigation}>
-          <TouchableOpacity onPress={() => changeMonth(-1)}>
-            <Icon name="chevron-left" size={30} color="#4CAF50" />
-          </TouchableOpacity>
-          <Text style={[styles.currentMonth, { color: colors.text }]}>
-            {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
-          </Text>
-          <TouchableOpacity onPress={() => changeMonth(1)}>
-            <Icon name="chevron-right" size={30} color="#4CAF50" />
-          </TouchableOpacity>
+      <ScrollView contentContainerStyle={styles.scrollViewContent}>
+        <View style={[styles.calendarContainer, { backgroundColor: colors.card }]}>
+          <View style={styles.monthNavigation}>
+            <TouchableOpacity onPress={() => changeMonth(-1)}>
+              <Icon name="chevron-left" size={30} color="#4CAF50" />
+            </TouchableOpacity>
+            <Text style={[styles.currentMonth, { color: colors.text }]}>
+              {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+            </Text>
+            <TouchableOpacity onPress={() => changeMonth(1)}>
+              <Icon name="chevron-right" size={30} color="#4CAF50" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.daysOfWeek}>
+            {DAYS_OF_WEEK.map((day, index) => (
+              <Text key={index} style={[styles.dayOfWeek, index === 5 && styles.friday, { color: colors.text }]}>{day}</Text>
+            ))}
+          </View>
+          {renderCalendarGrid()}
         </View>
-        <View style={styles.daysOfWeek}>
-          {DAYS_OF_WEEK.map((day, index) => (
-            <Text key={index} style={[styles.dayOfWeek, index === 5 && styles.friday, { color: colors.text }]}>{day}</Text>
+        <View style={[styles.eventsContainer, { backgroundColor: colors.card }]}>
+          <Text style={[styles.eventsTitle, { color: colors.text }]}>Islamic Events</Text>
+          {currentEvents.map((event, index) => (
+            <TouchableOpacity key={index} style={styles.eventItem} onPress={() => navigateToEventDate(event)}>
+              <View>
+                <Text style={[styles.eventName, { color: colors.text }]}>{event.name}</Text>
+                <Text style={[styles.eventDescription, { color: '#4CAF50' }]}>
+                  {`${event.hijriDay} ${ISLAMIC_MONTHS[event.hijriMonth - 1]} ${event.hijriYear} AH`}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => handleEventInfoPress(event)}>
+                <Icon name="info-outline" size={24} color="#4CAF50" />
+              </TouchableOpacity>
+            </TouchableOpacity>
           ))}
         </View>
-        {renderCalendarGrid()}
-      </View>
-      <View style={[styles.eventsContainer, { backgroundColor: colors.card }]}>
-        <Text style={[styles.eventsTitle, { color: colors.text }]}>Islamic Events</Text>
-        {currentEvents.map((event, index) => (
-          <TouchableOpacity key={index} style={styles.eventItem} onPress={() => navigateToEventDate(event)}>
-            <View>
-              <Text style={[styles.eventName, { color: colors.text }]}>{event.name}</Text>
-              <Text style={[styles.eventDescription, { color: '#4CAF50' }]}>
-                {`${event.hijriDay} ${ISLAMIC_MONTHS[event.hijriMonth - 1]} ${event.hijriYear} AH`}
-              </Text>
-            </View>
-            <TouchableOpacity onPress={() => handleEventInfoPress(event)}>
-              <Icon name="info-outline" size={24} color="#4CAF50" />
-            </TouchableOpacity>
-          </TouchableOpacity>
-        ))}
-      </View>
+      </ScrollView>
       <Modal
         animationType="slide"
         transparent={true}
@@ -275,13 +281,17 @@ const IslamicCalendar = ({ themeColors }) => {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 15,
+  },
+  scrollViewContent: {
+    flexGrow: 1,
   },
   header: {
     flexDirection: 'row',
@@ -431,6 +441,10 @@ const styles = StyleSheet.create({
   closeButtonText: {
     color: '#ffffff',
     fontWeight: 'bold',
+  },
+  emptyDay: {
+    width: 40,
+    height: 40,
   },
 });
 
