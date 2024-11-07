@@ -61,24 +61,23 @@ const IslamicCalendar = ({ themeColors }) => {
     if (!currentHijriYear) return;
 
     const dynamicEvents = generateDynamicEvents(currentHijriYear);
+    const nextYearEvents = generateDynamicEvents(currentHijriYear + 1);
+    const allEvents = [...dynamicEvents, ...nextYearEvents];
     const today = moment();
     
-    const sortedEvents = dynamicEvents.sort((a, b) => {
-      const dateA = moment(`${a.hijriYear}-${a.hijriMonth}-${a.hijriDay}`, 'iYYYY-iM-iD');
-      const dateB = moment(`${b.hijriYear}-${b.hijriMonth}-${b.hijriDay}`, 'iYYYY-iM-iD');
-      
-      if (dateA.isBefore(today) && dateB.isBefore(today)) {
+    // Only keep future events
+    const futureEvents = allEvents
+      .filter(event => {
+        const eventDate = moment(`${event.hijriYear}-${event.hijriMonth}-${event.hijriDay}`, 'iYYYY-iM-iD');
+        return eventDate.isSameOrAfter(today, 'day');
+      })
+      .sort((a, b) => {
+        const dateA = moment(`${a.hijriYear}-${a.hijriMonth}-${a.hijriDay}`, 'iYYYY-iM-iD');
+        const dateB = moment(`${b.hijriYear}-${b.hijriMonth}-${b.hijriDay}`, 'iYYYY-iM-iD');
         return dateA.diff(dateB);
-      } else if (dateA.isBefore(today)) {
-        return 1;
-      } else if (dateB.isBefore(today)) {
-        return -1;
-      } else {
-        return dateA.diff(dateB);
-      }
-    });
+      });
 
-    setCurrentEvents(sortedEvents);
+    setCurrentEvents(futureEvents);
   };
 
   const generateDynamicEvents = (hijriYear) => {
@@ -117,8 +116,17 @@ const IslamicCalendar = ({ themeColors }) => {
     const gregorianDate = eventDate.toDate();
     
     setCurrentDate(gregorianDate);
-    setSelectedDate(null); // Reset selected date
-    fetchCalendarData(); // Fetch new calendar data for the selected month
+    
+    // Find the corresponding calendar date and select it
+    const matchingDate = calendarData.find(date => 
+      parseInt(date.hijri.day) === event.hijriDay &&
+      parseInt(date.hijri.month.number) === event.hijriMonth &&
+      parseInt(date.hijri.year) === event.hijriYear
+    );
+    
+    if (matchingDate) {
+      setSelectedDate(matchingDate);
+    }
   };
 
   const ISLAMIC_MONTHS = [
@@ -211,7 +219,7 @@ const IslamicCalendar = ({ themeColors }) => {
 
   const getSubHeaderDate = () => {
     if (selectedDate) {
-      return selectedDate.gregorian.date;
+      return `${selectedDate.gregorian.month.en} ${selectedDate.gregorian.day}, ${selectedDate.gregorian.year}`;
     }
     return '';
   };
@@ -219,9 +227,6 @@ const IslamicCalendar = ({ themeColors }) => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themeColors.backgroundColor }]}>
       <View style={[styles.header, { backgroundColor: colors.card }]}>
-        <TouchableOpacity onPress={() => {}}>
-          <Icon name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
         <View>
           <Text style={[styles.headerTitle, { color: colors.text }]}>{getHeaderDate()}</Text>
           <Text style={[styles.headerSubtitle, { color: colors.text }]}>{getSubHeaderDate()}</Text>
@@ -249,19 +254,28 @@ const IslamicCalendar = ({ themeColors }) => {
         </View>
         <View style={[styles.eventsContainer, { backgroundColor: colors.card }]}>
           <Text style={[styles.eventsTitle, { color: colors.text }]}>Islamic Events</Text>
-          {currentEvents.map((event, index) => (
-            <TouchableOpacity key={index} style={styles.eventItem} onPress={() => navigateToEventDate(event)}>
-              <View>
-                <Text style={[styles.eventName, { color: colors.text }]}>{event.name}</Text>
-                <Text style={[styles.eventDescription, { color: '#4CAF50' }]}>
-                  {`${event.hijriDay} ${ISLAMIC_MONTHS[event.hijriMonth - 1]} ${event.hijriYear} AH`}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => handleEventInfoPress(event)}>
-                <Icon name="info-outline" size={24} color="#4CAF50" />
+          {currentEvents.map((event, index) => {
+            // Convert Hijri to Gregorian using moment-hijri
+            const hijriDate = moment(`${event.hijriYear}-${event.hijriMonth}-${event.hijriDay}`, 'iYYYY-iM-iD');
+            const gregorianDate = hijriDate.format('MMMM D, YYYY');
+            
+            return (
+              <TouchableOpacity key={index} style={styles.eventItem} onPress={() => navigateToEventDate(event)}>
+                <View>
+                  <Text style={[styles.eventName, { color: colors.text }]}>{event.name}</Text>
+                  <Text style={[styles.eventDescription, { color: '#4CAF50' }]}>
+                    {`${event.hijriDay} ${ISLAMIC_MONTHS[event.hijriMonth - 1]} ${event.hijriYear} AH`}
+                  </Text>
+                  <Text style={[styles.gregorianDate, { color: colors.text }]}>
+                    {gregorianDate}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => handleEventInfoPress(event)}>
+                  <Icon name="info-outline" size={24} color="#4CAF50" />
+                </TouchableOpacity>
               </TouchableOpacity>
-            </TouchableOpacity>
-          ))}
+            );
+          })}
         </View>
       </ScrollView>
       <Modal
@@ -446,11 +460,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
   },
+  gregorianDate: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginTop: 2,
+  },
 });
-
-const ISLAMIC_MONTHS = [
-  'Muharram', 'Safar', 'Rabi al-awwal', 'Rabi al-thani', 'Jumada al-awwal', 'Jumada al-thani',
-  'Rajab', "Sha'ban", 'Ramadan', 'Shawwal', 'Dhu al-Qadah', 'Dhu al-Hijjah'
-];
 
 export default IslamicCalendar;

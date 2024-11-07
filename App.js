@@ -24,6 +24,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const Tab = createBottomTabNavigator();
 const DuasStack = createStackNavigator();
@@ -125,8 +126,18 @@ function CustomTabBar({ state, descriptors, navigation, themeColors }) {
               onPress={onPress}
               style={styles.tabItem}
             >
-              <Animated.View style={{ transform: [{ scale: animatedValue }] }}>
-                {options.tabBarIcon({ focused: isFocused, color: isFocused ? '#4CAF50' : 'gray', size: 24 })}
+              <Animated.View 
+                style={[
+                  styles.iconContainer,
+                  isFocused && styles.activeIconContainer,
+                  { transform: [{ scale: animatedValue }] }
+                ]}
+              >
+                {options.tabBarIcon({ 
+                  focused: isFocused, 
+                  color: isFocused ? themeColors.activeTabColor : 'gray', 
+                  size: 24 
+                })}
               </Animated.View>
             </TouchableOpacity>
           );
@@ -403,14 +414,9 @@ export default function App() {
           },
           tabBarActiveTintColor: themeColors.activeTabColor,
           tabBarInactiveTintColor: 'gray',
-          tabBarStyle: ({ route }) => ({
-            display: 'flex',
-            backgroundColor: themeColors.tabBarColor,
-            elevation: 0, // for Android
-            shadowOpacity: 0, // for iOS
-            borderTopWidth: 0, // removes the top border
-            backgroundColor: isDarkMode ? '#1E1E1E' : themeColors.backgroundColor,
-          }),
+          tabBarStyle: {
+            display: 'none',
+          },
         })}
       >
         <Tab.Screen name="Prayer Times">
@@ -429,7 +435,9 @@ export default function App() {
         <Tab.Screen name="Quran">
           {(props) => (
             <ScreenWrapper themeColors={themeColors}>
-              <QuranReader {...props} themeColors={themeColors} language={language} />
+              <ErrorBoundary>
+                <QuranReader {...props} themeColors={themeColors} language={language} />
+              </ErrorBoundary>
             </ScreenWrapper>
           )}
         </Tab.Screen>
@@ -490,30 +498,36 @@ const { width, height } = Dimensions.get('window');
 const styles = StyleSheet.create({
   tabBarContainer: {
     position: 'absolute',
-    bottom: height * 0.03,
-    left: width * 0.02,
-    right: width * 0.02,
+    bottom: 0,
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    zIndex: 1000,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    backgroundColor: 'transparent',
   },
   tabBar: {
     flexDirection: 'row',
     backgroundColor: 'white',
-    borderRadius: 25,
-    height: height * 0.08,
+    borderRadius: 30,
+    height: 60,
+    width: '100%',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+    paddingHorizontal: 10,
+    alignItems: 'center',
   },
   tabItem: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 5,
   },
   safeArea: {
     flex: 1,
@@ -531,5 +545,18 @@ const styles = StyleSheet.create({
   },
   hadithContent: {
     paddingBottom: 100,
+  },
+  iconContainer: {
+    padding: 6,
+    borderRadius: 25,
+    height: 45,
+    width: 45,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activeIconContainer: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+    borderRadius: 25,
+    padding: 8,
   },
 });

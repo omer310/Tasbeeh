@@ -29,7 +29,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#509272"
       },
       "icon": "./assets/icon.png",
       "permissions": [
@@ -48,7 +48,10 @@
       ],
       "package": "com.omer310.TasbeehApp",
       "useNextNotificationsApi": true,
-      "runtimeVersion": "1.0.0"
+      "runtimeVersion": "1.0.0",
+      "config": {
+        "largeHeap": true
+      }
     },
     "web": {
       "favicon": "./assets/icon.png"

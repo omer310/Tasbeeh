@@ -107,7 +107,13 @@ export default function HadithOfTheDay({ themeColors, language }) {
   };
 
   const renderHadith = useCallback(({ item }) => (
-    <View style={[styles.hadithContainer, { backgroundColor: themeColors.backgroundColor }]}>
+    <View style={[
+      styles.hadithContainer, 
+      { 
+        backgroundColor: themeColors.isDark ? 'rgba(255, 255, 255, 0.05)' : themeColors.backgroundColor,
+        borderRadius: 15,
+      }
+    ]}>
       <Text style={[styles.hadithText, { color: themeColors.textColor }]}>{item.engText}</Text>
       <Text style={[styles.arabicText, { color: themeColors.textColor }]}>{item.araText}</Text>
       <Text style={[styles.hadithReference, { color: themeColors.secondaryTextColor }]}>
@@ -201,7 +207,9 @@ export default function HadithOfTheDay({ themeColors, language }) {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.backgroundColor }]}>
+    <SafeAreaView style={[styles.container, { 
+      backgroundColor: themeColors.isDark ? '#121212' : themeColors.backgroundColor 
+    }]}>
       <FlatList
         ListHeaderComponent={renderHeader}
         data={hadiths}
@@ -217,7 +225,10 @@ export default function HadithOfTheDay({ themeColors, language }) {
             <Text style={[styles.error, { color: themeColors.textColor }]}>{getTranslatedText('noHadithsFound')}</Text>
           )
         }
-        contentContainerStyle={styles.flatListContent}
+        contentContainerStyle={[
+          styles.flatListContent,
+          { backgroundColor: themeColors.isDark ? '#121212' : themeColors.backgroundColor }
+        ]}
       />
       {renderPickerModal()}
     </SafeAreaView>

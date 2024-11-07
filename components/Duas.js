@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, SafeAreaView, TextInput, Dimensions, StatusBar, Platform, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { initialDuaCategories } from './duasData';
+import { initialDuaCategories } from '../data/duasData';
 import MyDuas from './MyDuas';
 
 // Add this function at the top of your file, outside of the Duas component

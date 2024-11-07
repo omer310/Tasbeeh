@@ -220,6 +220,7 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     if (!prayerTimesRef.current) return null;
     const isNext = nextPrayer === prayer;
     const iconSource = getPrayerIcon(prayer);
+    const isArabic = language === 'ar';
     
     const convertTo12Hour = (time) => {
       const [hours, minutes] = time.split(':').map(Number);
@@ -228,20 +229,29 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
       return `${adjustedHours}:${minutes.toString().padStart(2, '0')} ${period}`;
     };
 
+    // Calculate last time for Isha (midnight)
+    const getLastIshaTime = () => {
+      if (prayerTimesRef.current['Midnight']) {
+        return prayerTimesRef.current['Midnight'];
+      }
+      return null;
+    };
+
     return (
       <TouchableOpacity 
         key={prayer}
         style={[
           styles.prayerItem, 
           isNext && styles.nextPrayer,
-          isDarkMode && styles.prayerItemDark
+          isDarkMode && styles.prayerItemDark,
+          isArabic && styles.prayerItemRTL
         ]}
         onPress={() => {
           setSelectedPrayer(prayer);
           setAdhanModalVisible(true);
         }}
       >
-        <View style={styles.leftContent}>
+        <View style={[styles.leftContent, isArabic && styles.leftContentRTL]}>
           <View style={styles.iconContainer}>
             {iconSource ? (
               <Image 
@@ -257,25 +267,41 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
               />
             )}
           </View>
-          <View style={styles.prayerInfo}>
-            <Text style={[styles.prayerName, isDarkMode && styles.prayerNameDark]}>
+          <View style={[styles.prayerInfo, isArabic && styles.prayerInfoRTL]}>
+            <Text style={[
+              styles.prayerName, 
+              isDarkMode && styles.prayerNameDark,
+              isArabic && styles.arabicText
+            ]}>
               {getTranslatedText(prayer.toLowerCase())}
             </Text>
             {prayer === 'Fajr' && (
-              <Text style={[styles.sunriseTime, { color: isDarkMode ? themeColors.darkSecondaryTextColor : themeColors.secondaryTextColor }]}>
+              <Text style={[
+                styles.sunriseTime, 
+                { color: isDarkMode ? themeColors.darkSecondaryTextColor : themeColors.secondaryTextColor },
+                isArabic && styles.arabicText
+              ]}>
                 {getTranslatedText('sunrise')} {convertTo12Hour(prayerTimesRef.current['Sunrise'])}
               </Text>
             )}
           </View>
         </View>
-        <View style={styles.prayerTimeContainer}>
-          <Text style={[styles.prayerTime, isDarkMode && { color: '#6ECF76' }]}>
+        <View style={[styles.prayerTimeContainer, isArabic && styles.prayerTimeContainerRTL]}>
+          <Text style={[
+            styles.prayerTime, 
+            isDarkMode && { color: '#6ECF76' },
+            isArabic && styles.arabicText
+          ]}>
             {convertTo12Hour(prayerTimesRef.current[prayer])}
           </Text>
           {isNext && (
-            <View style={styles.nextIndicator}>
+            <View style={[styles.nextIndicator, isArabic && styles.nextIndicatorRTL]}>
               <Ionicons name="time-outline" size={16} color={isDarkMode ? '#6ECF76' : '#4CAF50'} />
-              <Text style={[styles.nextText, isDarkMode && { color: '#6ECF76' }]}>
+              <Text style={[
+                styles.nextText, 
+                isDarkMode && { color: '#6ECF76' },
+                isArabic && styles.arabicText
+              ]}>
                 {getTranslatedText('next')}
               </Text>
             </View>
@@ -409,6 +435,27 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     schedulePrayerNotifications();
   };
 
+  const handlePreferenceChange = (prayer, adhanType, reminderTime) => {
+    // Update your prayer times settings
+    // Schedule notifications based on both adhan type and reminder time
+    if (reminderTime !== 'None') {
+      // Schedule reminder notification
+      const reminderMinutes = {
+        '5 minutes before': 5,
+        '10 minutes before': 10,
+        '15 minutes before': 15,
+        '30 minutes before': 30,
+        '1 hour before': 60
+      }[reminderTime] || 0;
+      
+      // Schedule reminder notification reminderMinutes before prayer time
+      scheduleReminderNotification(prayer, reminderMinutes);
+    }
+
+    // Schedule main adhan notification
+    scheduleAdhanNotification(prayer, adhanType);
+  };
+
   return (
     <ImageBackground 
       source={require('../assets/islamic-pattern2.png')}
@@ -442,7 +489,11 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
                 </Text>
               </TouchableOpacity>
               <Text style={[styles.date, { color: isDarkMode ? themeColors.darkTextColor : themeColors.textColor }]}>
-                {getTranslatedText('today')}, {new Date().toLocaleDateString(language === 'ar' ? 'ar-SA' : 'en-US', { day: 'numeric', month: 'long' })}
+                {new Date().toLocaleDateString(language === 'ar' ? 'ar-SA' : 'en-US', { 
+                  weekday: 'long',
+                  day: 'numeric', 
+                  month: 'long' 
+                })}
               </Text>
               {nextPrayer && (
                 <Text style={[styles.countdown, { color: isDarkMode ? '#6ECF76' : themeColors.activeTabColor }]}>
@@ -454,15 +505,6 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
               {['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'].map(renderPrayerTime)}
               {settings.showImsak && renderPrayerTime('Imsak')}
             </ScrollView>
-            <View style={[
-              styles.settingContainer, 
-              { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.1)' }
-            ]}>
-              <Text style={{ color: isDarkMode ? themeColors.darkTextColor : themeColors.textColor }}>
-                {getTranslatedText('playAdhan')}
-              </Text>
-              <Switch value={playAdhan} onValueChange={togglePlayAdhan} />
-            </View>
           </>
         ) : (
           <Text style={[styles.errorText, { color: themeColors.errorColor }]}>No prayer times available. Please check your settings and try again.</Text>
@@ -647,6 +689,32 @@ const styles = StyleSheet.create({
   retryButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  prayerItemRTL: {
+    flexDirection: 'row-reverse',
+  },
+  leftContentRTL: {
+    flexDirection: 'row-reverse',
+  },
+  prayerInfoRTL: {
+    alignItems: 'flex-end',
+    marginRight: 15,
+    marginLeft: 0,
+  },
+  prayerTimeContainerRTL: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'flex-start',
+  },
+  nextIndicatorRTL: {
+    flexDirection: 'row-reverse',
+    marginRight: 10,
+    marginLeft: 0,
+  },
+  arabicText: {
+    fontFamily: 'System', // Consider using an Arabic-specific font
+    textAlign: 'right',
+    fontSize: 20, // Slightly larger for Arabic text
+    lineHeight: 28,
   },
 });
 

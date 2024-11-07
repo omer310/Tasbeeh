@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, Dimensions, SafeAreaView, ActivityIndicator, TextInput, ScrollView } from 'react-native';
+import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, Dimensions, SafeAreaView, ActivityIndicator, TextInput, ScrollView, Platform, TouchableWithoutFeedback } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import quranImages from './quranImages';
@@ -9,125 +9,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import CustomColorPicker from './CustomColorPicker';
 import { useNavigation } from '@react-navigation/native';
 import { Switch } from 'react-native';
-
-
-// Surah lookup table (page numbers are examples, please verify and adjust)
-const surahData = [
-  { name: "Al-Fatihah", startPage: 1 },
-  { name: "Al-Baqarah", startPage: 2 },
-  { name: "Aal-E-Imran", startPage: 50 },
-  { name: "An-Nisa", startPage: 77 },
-  { name: "Al-Ma'idah", startPage: 106 },
-  { name: "Al-An'am", startPage: 128 },
-  { name: "Al-A'raf", startPage: 151 },
-  { name: "Al-Anfal", startPage: 177 },
-  { name: "At-Tawbah", startPage: 187 },
-  { name: "Yunus", startPage: 208 },
-  { name: "Hud", startPage: 221 },
-  { name: "Yusuf", startPage: 235 },
-  { name: "Ar-Ra'd", startPage: 249 },
-  { name: "Ibrahim", startPage: 255 },
-  { name: "Al-Hijr", startPage: 262 },
-  { name: "An-Nahl", startPage: 267 },
-  { name: "Al-Isra", startPage: 282 },
-  { name: "Al-Kahf", startPage: 293 },
-  { name: "Maryam", startPage: 305 },
-  { name: "Ta-Ha", startPage: 312 },
-  { name: "Al-Anbiya", startPage: 322 },
-  { name: "Al-Hajj", startPage: 332 },
-  { name: "Al-Mu'minun", startPage: 342 },
-  { name: "An-Nur", startPage: 350 },
-  { name: "Al-Furqan", startPage: 359 },
-  { name: "Ash-Shu'ara", startPage: 367 },
-  { name: "An-Naml", startPage: 377 },
-  { name: "Al-Qasas", startPage: 385 },
-  { name: "Al-Ankabut", startPage: 396 },
-  { name: "Ar-Rum", startPage: 404 },
-  { name: "Luqman", startPage: 411 },
-  { name: "As-Sajdah", startPage: 415 },
-  { name: "Al-Ahzab", startPage: 418 },
-  { name: "Saba", startPage: 428 },
-  { name: "Fatir", startPage: 434 },
-  { name: "Ya-Sin", startPage: 440 },
-  { name: "As-Saffat", startPage: 446 },
-  { name: "Sad", startPage: 453 },
-  { name: "Az-Zumar", startPage: 458 },
-  { name: "Ghafir", startPage: 467 },
-  { name: "Fussilat", startPage: 477 },
-  { name: "Ash-Shura", startPage: 483 },
-  { name: "Az-Zukhruf", startPage: 489 },
-  { name: "Ad-Dukhan", startPage: 496 },
-  { name: "Al-Jathiya", startPage: 499 },
-  { name: "Al-Ahqaf", startPage: 502 },
-  { name: "Muhammad", startPage: 507 },
-  { name: "Al-Fath", startPage: 511 },
-  { name: "Al-Hujurat", startPage: 515 },
-  { name: "Qaf", startPage: 518 },
-  { name: "Adh-Dhariyat", startPage: 520 },
-  { name: "At-Tur", startPage: 523 },
-  { name: "An-Najm", startPage: 526 },
-  { name: "Al-Qamar", startPage: 528 },
-  { name: "Ar-Rahman", startPage: 531 },
-  { name: "Al-Waqi'ah", startPage: 534 },
-  { name: "Al-Hadid", startPage: 537 },
-  { name: "Al-Mujadila", startPage: 542 },
-  { name: "Al-Hashr", startPage: 545 },
-  { name: "Al-Mumtahanah", startPage: 549 },
-  { name: "As-Saff", startPage: 551 },
-  { name: "Al-Jumu'ah", startPage: 553 },
-  { name: "Al-Munafiqun", startPage: 554 },
-  { name: "At-Taghabun", startPage: 556 },
-  { name: "At-Talaq", startPage: 558 },
-  { name: "At-Tahrim", startPage: 560 },
-  { name: "Al-Mulk", startPage: 562 },
-  { name: "Al-Qalam", startPage: 564 },
-  { name: "Al-Haqqah", startPage: 566 },
-  { name: "Al-Ma'arij", startPage: 568 },
-  { name: "Nuh", startPage: 570 },
-  { name: "Al-Jinn", startPage: 572 },
-  { name: "Al-Muzzammil", startPage: 574 },
-  { name: "Al-Muddaththir", startPage: 575 },
-  { name: "Al-Qiyamah", startPage: 577 },
-  { name: "Al-Insan", startPage: 578 },
-  { name: "Al-Mursalat", startPage: 580 },
-  { name: "An-Naba", startPage: 582 },
-  { name: "An-Nazi'at", startPage: 583 },
-  { name: "Abasa", startPage: 585 },
-  { name: "At-Takwir", startPage: 586 },
-  { name: "Al-Infitar", startPage: 587 },
-  { name: "Al-Mutaffifin", startPage: 587 },
-  { name: "Al-Inshiqaq", startPage: 589 },
-  { name: "Al-Buruj", startPage: 590 },
-  { name: "At-Tariq", startPage: 591 },
-  { name: "Al-A'la", startPage: 591 },
-  { name: "Al-Ghashiyah", startPage: 592 },
-  { name: "Al-Fajr", startPage: 593 },
-  { name: "Al-Balad", startPage: 594 },
-  { name: "Ash-Shams", startPage: 595 },
-  { name: "Al-Lail", startPage: 595 },
-  { name: "Ad-Duha", startPage: 596 },
-  { name: "Ash-Sharh", startPage: 596 },
-  { name: "At-Tin", startPage: 597 },
-  { name: "Al-Alaq", startPage: 597 },
-  { name: "Al-Qadr", startPage: 598 },
-  { name: "Al-Bayyinah", startPage: 598 },
-  { name: "Az-Zalzalah", startPage: 599 },
-  { name: "Al-Adiyat", startPage: 599 },
-  { name: "Al-Qari'ah", startPage: 600 },
-  { name: "At-Takathur", startPage: 600 },
-  { name: "Al-Asr", startPage: 601 },
-  { name: "Al-Humazah", startPage: 601 },
-  { name: "Al-Fil", startPage: 601 },
-  { name: "Quraish", startPage: 602 },
-  { name: "Al-Ma'un", startPage: 602 },
-  { name: "Al-Kawthar", startPage: 602 },
-  { name: "Al-Kafirun", startPage: 603 },
-  { name: "An-Nasr", startPage: 603 },
-  { name: "Al-Masad", startPage: 603 },
-  { name: "Al-Ikhlas", startPage: 604 },
-  { name: "Al-Falaq", startPage: 604 },
-  { name: "An-Nas", startPage: 604 }
-];
+import { surahData } from '../data/surahData';
+import EnglishTranslation from './EnglishTranslation';
+import BookmarkManager from './BookmarkManager';
+import BookmarkList from './BookmarkList';
 
 function QuranReader({ navigation, themeColors }) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -135,7 +20,6 @@ function QuranReader({ navigation, themeColors }) {
   const [surahs, setSurahs] = useState([]);
   const [filteredSurahs, setFilteredSurahs] = useState([]);
   const [showSurahList, setShowSurahList] = useState(false);
-  const [focusMode, setFocusMode] = useState(false);
   const [currentJuz, setCurrentJuz] = useState(16);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -146,6 +30,9 @@ function QuranReader({ navigation, themeColors }) {
   const [bookmarks, setBookmarks] = useState({});
   const [isEnglishVersion, setIsEnglishVersion] = useState(false);
   const [englishPages, setEnglishPages] = useState({});
+  const [focusMode, setFocusMode] = useState(false);
+  const [showBookmarkList, setShowBookmarkList] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     // Fetch surahs data from API and load bookmarks
@@ -181,7 +68,6 @@ function QuranReader({ navigation, themeColors }) {
     try {
       const response = await fetch('https://api.quran.com/api/v4/quran/translations/131');
       const data = await response.json();
-      console.log('API Response:', JSON.stringify(data, null, 2));
 
       if (!data.translations || !Array.isArray(data.translations)) {
         console.error('Unexpected API response structure:', data);
@@ -191,9 +77,19 @@ function QuranReader({ navigation, themeColors }) {
       const formattedPages = {};
       data.translations.forEach((verse, index) => {
         if (!verse || typeof verse.text !== 'string') {
-          console.error(`Invalid verse data at index ${index}:`, verse);
           return;
         }
+
+        // Enhanced text cleaning
+        const cleanText = verse.text
+          .replace(/<sup.*?<\/sup>/g, '') // Remove sup elements with their content
+          .replace(/[<>]/g, '') // Remove any remaining angle brackets
+          .replace(/foot_note=\d+/g, '') // Remove foot_note references
+          .replace(/\s+/g, ' ') // Normalize spaces
+          .replace(/["]/g, '"') // Replace special quotes
+          .replace(/[']/g, "'") // Replace special apostrophes
+          .replace(/\s+([.,!?])/g, '$1') // Remove spaces before punctuation
+          .trim();
 
         // Calculate page number (adjust this calculation as needed)
         const pageNumber = Math.floor(index / 7) + 1;
@@ -204,12 +100,11 @@ function QuranReader({ navigation, themeColors }) {
         
         formattedPages[pageNumber].push({
           verseNumber: index + 1,
-          text: verse.text
+          text: cleanText
         });
       });
 
       setEnglishPages(formattedPages);
-      console.log('English translation fetched:', Object.keys(formattedPages).length, 'pages');
     } catch (error) {
       console.error('Error fetching English translation:', error);
       console.error('Error details:', error.message, error.stack);
@@ -217,18 +112,7 @@ function QuranReader({ navigation, themeColors }) {
   };
 
   const sortSurahs = (surahsToSort, currentBookmarks) => {
-    return [...surahsToSort].sort((a, b) => {
-      const aBookmarked = Object.keys(currentBookmarks).some(page => 
-        parseInt(page) >= a.pages[0] && parseInt(page) <= a.pages[a.pages.length - 1]
-      );
-      const bBookmarked = Object.keys(currentBookmarks).some(page => 
-        parseInt(page) >= b.pages[0] && parseInt(page) <= b.pages[b.pages.length - 1]
-      );
-      
-      if (aBookmarked && !bBookmarked) return -1;
-      if (!aBookmarked && bBookmarked) return 1;
-      return a.id - b.id;
-    });
+    return BookmarkManager.sortSurahs(surahsToSort, currentBookmarks);
   };
 
   const saveBookmarks = async (newBookmarks) => {
@@ -242,12 +126,6 @@ function QuranReader({ navigation, themeColors }) {
       console.error('Error saving bookmarks:', error);
     }
   };
-
-  useEffect(() => {
-    if (selectedSurah) {
-      setCurrentPage(selectedSurah.pages[0]); // Assuming the API provides a 'pages' array
-    }
-  }, [selectedSurah]);
 
   useEffect(() => {
     // Update Juz number based on current page
@@ -279,17 +157,22 @@ function QuranReader({ navigation, themeColors }) {
   }, [searchQuery, surahs]);
 
   const toggleSurahList = () => {
+    setShowSurahList(false);
+    setShowBookmarkList(false);
+    setShowColorPicker(false);
     setShowSurahList(!showSurahList);
   };
 
-  const toggleFocusMode = () => {
-    const newFocusMode = !focusMode;
-    setFocusMode(newFocusMode);
-    navigation.setParams({ tabBarVisible: !newFocusMode });
-  };
-
   const handleSurahClick = (surah) => {
+    // Find the bookmarked page for this surah
+    const bookmarkedPage = Object.keys(bookmarks).find(page => 
+      parseInt(page) >= surah.pages[0] && parseInt(page) <= surah.pages[surah.pages.length - 1]
+    );
+    
+    // Update both states at once
     setSelectedSurah(surah);
+    setCurrentPage(bookmarkedPage ? parseInt(bookmarkedPage) : surah.pages[0]);
+    setShowSurahList(false);
   };
 
   const handleGestureEvent = ({ nativeEvent }) => {
@@ -302,35 +185,50 @@ function QuranReader({ navigation, themeColors }) {
     }
   };
 
-  const toggleBookmark = () => {
+  const toggleBookmark = async () => {
     if (bookmarks[currentPage]) {
-      // If there's already a bookmark, remove it
-      const newBookmarks = { ...bookmarks };
-      delete newBookmarks[currentPage];
-      saveBookmarks(newBookmarks);
+      // Remove bookmark
+      const newBookmarks = await BookmarkManager.removeBookmark(currentPage);
+      setBookmarks(newBookmarks);
+      const sortedSurahs = sortSurahs(surahs, newBookmarks);
+      setSurahs(sortedSurahs);
+      setFilteredSurahs(sortedSurahs);
     } else {
-      // If there's no bookmark, show the color picker
+      // Show color picker and close other menus
+      setShowSurahList(false);
+      setShowBookmarkList(false);
       setShowColorPicker(true);
     }
   };
 
-  const handleColorSelect = (color) => {
-    const newBookmarks = { ...bookmarks };
-    if (newBookmarks[currentPage] === color) {
-      delete newBookmarks[currentPage];
-    } else {
-      newBookmarks[currentPage] = color;
+  const handleColorSelect = async (color) => {
+    try {
+      const newBookmarks = await BookmarkManager.saveBookmark(currentPage, color);
+      setBookmarks(newBookmarks);
+      const sortedSurahs = sortSurahs(surahs, newBookmarks);
+      setSurahs(sortedSurahs);
+      setFilteredSurahs(sortedSurahs);
+      setShowColorPicker(false);
+      setShowSurahList(false);
+      setShowBookmarkList(false);
+    } catch (error) {
+      console.error('Error handling color selection:', error);
     }
-    saveBookmarks(newBookmarks);
-    setShowColorPicker(false);
   };
 
   const getUsedColors = () => {
     return Object.values(bookmarks) || [];
   };
 
+  const handleOutsideClick = () => {
+    setShowSurahList(false);
+    setShowBookmarkList(false);
+    setShowColorPicker(false);
+  };
+
   const renderBookmarkIcon = () => {
-    const bookmarkColor = bookmarks[currentPage];
+    const bookmarkData = bookmarks[currentPage];
+    const bookmarkColor = bookmarkData?.color || bookmarkData;
     return (
       <TouchableOpacity onPress={toggleBookmark} style={styles.iconButtonContainer}>
         <LinearGradient
@@ -348,10 +246,12 @@ function QuranReader({ navigation, themeColors }) {
   };
 
   const renderSurahItem = ({ item }) => {
-    const isBookmarked = Object.keys(bookmarks).some(page => 
-      page >= item.pages[0] && page <= item.pages[item.pages.length - 1]
+    const bookmarkedPage = Object.keys(bookmarks).find(page => 
+      parseInt(page) >= item.pages[0] && parseInt(page) <= item.pages[item.pages.length - 1]
     );
-    const bookmarkColor = isBookmarked ? bookmarks[item.pages[0]] : null;
+    const isBookmarked = !!bookmarkedPage;
+    const bookmarkData = bookmarks[bookmarkedPage];
+    const bookmarkColor = bookmarkData?.color || bookmarkData;
 
     return (
       <TouchableOpacity onPress={() => handleSurahClick(item)} style={styles.surahItemContainer}>
@@ -367,122 +267,197 @@ function QuranReader({ navigation, themeColors }) {
           </Text>
           <Text style={[styles.surahArabicName, { color: themeColors.textColor }]}>{item.name_arabic}</Text>
           <Text style={[styles.surahDetails, { color: themeColors.secondaryTextColor }]}>
-            Page {item.pages[0]} • {item.verses_count} verses • {item.revelation_place}
+            Page {item.pages[0]}  {item.verses_count} verses • {item.revelation_place}
           </Text>
         </View>
         {isBookmarked && (
-          <Ionicons name="bookmark" size={24} color={bookmarkColor} style={styles.bookmarkIcon} />
+          <View style={styles.bookmarkIconContainer}>
+            <Ionicons 
+              name="bookmark" 
+              size={24} 
+              color={bookmarkColor} 
+              style={[
+                styles.bookmarkIcon,
+                themeColors.isDark && { opacity: 0.9 }
+              ]} 
+            />
+          </View>
         )}
       </TouchableOpacity>
     );
   };
 
+  const handleImageError = () => {
+    setImageError(true);
+    setIsLoading(false);
+    console.warn('Failed to load Quran page image');
+  };
+
+  const handleVersePress = async (verseKey) => {
+    try {
+      // Stop any playing audio
+      if (audioPlayer) {
+        audioPlayer.stop();
+      }
+
+      // Fetch audio URL
+      const audioResponse = await fetch(
+        `https://api.quran.com/api/v4/recitations/7/by_ayah/${verseKey}`
+      );
+      const audioData = await audioResponse.json();
+      const audioUrl = audioData.audio_files[0]?.audio_url;
+
+      // Fetch tafsir
+      const tafsirResponse = await fetch(
+        `https://api.quran.com/api/v4/tafsirs/169/by_ayah/${verseKey}`
+      );
+      const tafsirData = await tafsirResponse.json();
+      setTafsirContent(tafsirData.tafsirs[0]?.text || 'Tafsir not available');
+
+      // Play audio
+      if (audioUrl) {
+        const sound = new Sound(audioUrl, null, (error) => {
+          if (error) {
+            console.error('Error loading sound:', error);
+            return;
+          }
+          sound.play();
+          setAudioPlayer(sound);
+        });
+      }
+
+      setSelectedVerse(verseKey);
+      setShowTafsir(true);
+    } catch (error) {
+      console.error('Error handling verse press:', error);
+    }
+  };
+
+  const renderVerseOverlay = () => {
+    if (!showTafsir) return null;
+
+    return (
+      <BlurView
+        intensity={120}
+        tint={themeColors.isDark ? 'dark' : 'light'}
+        style={styles.verseOverlay}
+      >
+        <View style={[styles.tafsirContainer, { backgroundColor: themeColors.backgroundColor + '80' }]}>
+          <TouchableOpacity 
+            style={styles.closeButton}
+            onPress={() => {
+              setShowTafsir(false);
+              if (audioPlayer) {
+                audioPlayer.stop();
+              }
+            }}
+          >
+            <Ionicons name="close" size={24} color={themeColors.textColor} />
+          </TouchableOpacity>
+          <ScrollView style={styles.tafsirContent}>
+            <Text style={[styles.tafsirText, { color: themeColors.textColor }]}>
+              {tafsirContent}
+            </Text>
+          </ScrollView>
+        </View>
+      </BlurView>
+    );
+  };
+
   const renderQuranPage = () => (
     <View style={[
-      styles.pageContainer,
-      focusMode && styles.fullScreenPageContainer,
-      { backgroundColor: themeColors.backgroundColor }
+      styles.pageContainer, 
+      { backgroundColor: themeColors.isDark ? themeColors.backgroundColor : 'white' }
     ]}>
-      <View style={styles.headerContainer}>
-        <Text style={[styles.headerText, { color: themeColors.textColor }]}>{currentSurah}</Text>
-        <Text style={[styles.headerText, { color: themeColors.textColor }]}>Juz {currentJuz}</Text>
-      </View>
-      <View style={styles.imageContainer}>
-        {isEnglishVersion ? (
-          <ScrollView 
-            style={styles.englishTextContainer}
-            contentContainerStyle={styles.englishTextContentContainer}
-          >
-            {englishPages[currentPage] ? (
-              englishPages[currentPage].map((verse, index) => (
-                <View key={index} style={[
-                  styles.englishVerseContainer,
-                  { backgroundColor: themeColors.cardBackground }
-                ]}>
-                  <Text style={[styles.englishVerseNumber, { color: themeColors.accentColor }]}>
-                    {verse.verseNumber}
-                  </Text>
-                  <Text style={[styles.englishVerseText, { color: themeColors.textColor }]}>
-                    {verse.text}
-                  </Text>
-                </View>
-              ))
-            ) : (
-              <Text style={[styles.loadingText, { color: themeColors.textColor }]}>
-                Loading translation...
-              </Text>
-            )}
-          </ScrollView>
-        ) : (
-          <Image
-            style={styles.pageImage}
-            source={quranImages[currentPage] || quranImages[1]}
-            resizeMode="contain"
-            onLoadStart={() => setIsLoading(true)}
-            onLoadEnd={() => setIsLoading(false)}
-          />
-        )}
-        {isLoading && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={themeColors.accentColor} />
+      <View style={styles.headerInfoContainer}>
+        <LinearGradient
+          colors={[themeColors.gradientStart, themeColors.gradientEnd]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.headerStrip}
+        >
+          <View style={styles.headerContent}>
+            <Text style={styles.surahLabel} numberOfLines={1} adjustsFontSizeToFit>
+              {currentSurah}
+            </Text>
+            <View style={styles.stripDivider} />
+            <Text style={styles.pageLabel}>
+              Page {currentPage}
+            </Text>
+            <View style={styles.stripDivider} />
+            <Text style={styles.juzLabel}>
+              Juz {currentJuz}
+            </Text>
           </View>
-        )}
+        </LinearGradient>
+      </View>
+      
+      <View style={styles.imageContainer}>
+        <Image
+          style={[styles.pageImage, themeColors.isDark && styles.invertedImage]}
+          source={quranImages[currentPage] || quranImages[1]}
+          resizeMode="contain"
+        />
       </View>
     </View>
   );
 
+  useEffect(() => {
+    return () => {
+      // Cleanup resources when component unmounts
+      setCurrentPage(1);
+      setIsLoading(false);
+      setImageError(false);
+    };
+  }, []);
+
+  const toggleBookmarkList = () => {
+    setShowSurahList(false);
+    setShowColorPicker(false);
+    setShowBookmarkList(!showBookmarkList);
+  };
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={[styles.container, { backgroundColor: themeColors.backgroundColor }]}>
-        <View style={styles.content}>
+        <TouchableOpacity 
+          activeOpacity={1} 
+          onPress={handleOutsideClick}
+          style={styles.content}
+        >
           <View style={styles.quranContent}>
-            {!focusMode && (
-              <View style={[styles.topBar, { backgroundColor: themeColors.backgroundColor }]}>
-                <TouchableOpacity onPress={toggleSurahList} style={styles.iconButtonContainer}>
-                  <LinearGradient
-                    colors={[themeColors.gradientStart, themeColors.gradientEnd]}
-                    style={styles.iconButton}
-                  >
-                    <Ionicons name={showSurahList ? "menu" : "menu-outline"} size={24} color="#FFFFFF" />
-                  </LinearGradient>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={toggleFocusMode} style={styles.iconButtonContainer}>
-                  <LinearGradient
-                    colors={[themeColors.gradientStart, themeColors.gradientEnd]}
-                    style={styles.iconButton}
-                  >
-                    <Ionicons name="expand" size={24} color="#FFFFFF" />
-                  </LinearGradient>
-                </TouchableOpacity>
-                {renderBookmarkIcon()}
-              </View>
-            )}
+            <View style={[styles.topBar, { backgroundColor: themeColors.backgroundColor }]}>
+              <TouchableOpacity onPress={toggleSurahList} style={styles.iconButtonContainer}>
+                <LinearGradient
+                  colors={[themeColors.gradientStart, themeColors.gradientEnd]}
+                  style={styles.iconButton}
+                >
+                  <Ionicons name={showSurahList ? "menu" : "menu-outline"} size={24} color="#FFFFFF" />
+                </LinearGradient>
+              </TouchableOpacity>
+              {renderBookmarkIcon()}
+              <TouchableOpacity 
+                onPress={toggleBookmarkList} 
+                style={styles.iconButtonContainer}
+              >
+                <LinearGradient
+                  colors={[themeColors.gradientStart, themeColors.gradientEnd]}
+                  style={styles.iconButton}
+                >
+                  <Ionicons name="bookmarks-outline" size={24} color="#FFFFFF" />
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
             <PanGestureHandler
               onHandlerStateChange={handleGestureEvent}
               activeOffsetX={[-20, 20]}
             >
-              <View style={[styles.pageContainer, focusMode && styles.fullScreenContainer]}>
+              <View style={styles.pageContainer}>
                 {renderQuranPage()}
-                <View style={styles.pageNumberContainer}>
-                  <Text style={styles.pageNumberText}>{currentPage}</Text>
-                </View>
               </View>
             </PanGestureHandler>
-            {focusMode && (
-              <TouchableOpacity 
-                onPress={toggleFocusMode} 
-                style={styles.exitFullScreenButton}
-              >
-                <LinearGradient
-                  colors={[themeColors.gradientStart, themeColors.gradientEnd]}
-                  style={styles.exitFullScreenGradient}
-                >
-                  <Ionicons name="contract" size={24} color="#FFFFFF" />
-                </LinearGradient>
-              </TouchableOpacity>
-            )}
           </View>
-          {!focusMode && showSurahList && (
+          {showSurahList && (
             <BlurView
               intensity={120}
               tint={themeColors.isDark ? 'dark' : 'light'}
@@ -546,7 +521,20 @@ function QuranReader({ navigation, themeColors }) {
               </View>
             </BlurView>
           )}
-        </View>
+          {showBookmarkList && (
+            <BookmarkList
+              bookmarks={bookmarks}
+              onBookmarkPress={(page) => {
+                setCurrentPage(page);
+                setShowBookmarkList(false);
+                BookmarkManager.updateLastVisited(page);
+              }}
+              themeColors={themeColors}
+              onClose={() => setShowBookmarkList(false)}
+              surahs={surahs}
+            />
+          )}
+        </TouchableOpacity>
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -563,6 +551,10 @@ const styles = StyleSheet.create({
   },
   quranContent: {
     flex: 1,
+  },
+  SafeAreaView: {
+    flex: 1,
+    paddingTop: Platform.OS === 'android' ? 54 : 0,
   },
   topBar: {
     flexDirection: 'row',
@@ -590,34 +582,71 @@ const styles = StyleSheet.create({
   },
   pageContainer: {
     flex: 1,
-    backgroundColor: '#F8F9FB',
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 90,
     paddingBottom: 0,
   },
-  fullScreenPageContainer: {
-    paddingTop: 60,
+  headerInfoContainer: {
+    position: 'absolute',
+    top: 20,
+    left: 0,
+    right: 0,
+    zIndex: 100,
   },
-  headerContainer: {
+  headerStrip: {
+    height: 32,
+    marginHorizontal: 16,
+    borderRadius: 16,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  headerContent: {
+    flex: 1,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-    paddingHorizontal: 8,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
   },
-  headerText: {
+  surahLabel: {
+    color: '#FFFFFF',
     fontSize: 14,
-    color: '#2E7D32',
-    fontWeight: '500',
+    fontWeight: '600',
+    flex: 2,
+  },
+  pageLabel: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+  },
+  juzLabel: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+  },
+  stripDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    marginHorizontal: 8,
   },
   imageContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: -25,
   },
   pageImage: {
-    width: width - 32,
-    height: height - 180,
+    width: '100%',
+    height: '100%',
+    aspectRatio: 0.6, // Adjust this value based on your image aspect ratio
+    
   },
   loadingContainer: {
     position: 'absolute',
@@ -627,18 +656,18 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(247, 241, 227, 0.7)',
+    backgroundColor: 'white',
   },
   pageNumberContainer: {
     position: 'absolute',
-    bottom: 40,
+    bottom: -20,
     left: 0,
     right: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pageNumberText: {
-    fontSize: 13,
+    fontSize: 15,
     color: '#2E7D32',
     fontWeight: '500',
     paddingHorizontal: 15,
@@ -721,16 +750,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
-  fullScreenContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   colorPickerContainer: {
     position: 'absolute',
     top: 0,
@@ -775,32 +794,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginHorizontal: 10,
   },
-  englishTextContainer: {
+  darkModeImage: {
+    opacity: 0.87, // Slightly reduce opacity in dark mode for better contrast
+  },
+  imageWrapper: {
     flex: 1,
-    width: width - 32, // Adjust based on your padding
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  englishTextContentContainer: {
-    paddingVertical: 20,
+  invertedImage: {
+    opacity: 0.87,
+    tintColor: '#FFFFFF',
   },
-  englishVerseContainer: {
-    marginBottom: 15,
-    padding: 10,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+  bookmarkIconContainer: {
+    position: 'absolute',
+    right: 10,
+    top: '50%',
+    transform: [{ translateY: -12 }],
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 12,
+    padding: 4,
   },
-  englishVerseNumber: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginRight: 10,
-    minWidth: 25,
+  bookmarkIcon: {
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  englishVerseText: {
-    fontSize: 16,
-    lineHeight: 24,
-    flex: 1,
-  },
-  loadingText: {
+  errorText: {
     fontSize: 16,
     textAlign: 'center',
     marginTop: 20,

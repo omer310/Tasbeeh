@@ -3,34 +3,45 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Image, Ani
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Picker } from '@react-native-picker/picker';
 
 const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPreferenceChange }) => {
   const [selectedAdhan, setSelectedAdhan] = useState('Adhan (Madina)');
+  const [selectedReminder, setSelectedReminder] = useState('None');
   const [animation] = useState(new Animated.Value(0));
   const [sound, setSound] = useState();
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingAdhan, setPlayingAdhan] = useState(null);
 
   useEffect(() => {
-    loadPreference();
+    loadPreferences();
   }, [prayer]);
 
-  const loadPreference = async () => {
+  const loadPreferences = async () => {
     try {
-      const savedPreference = await AsyncStorage.getItem(`adhan_preference_${prayer}`);
-      if (savedPreference !== null) {
-        setSelectedAdhan(savedPreference);
+      const savedAdhan = await AsyncStorage.getItem(`adhan_preference_${prayer}`);
+      const savedReminder = await AsyncStorage.getItem(`reminder_preference_${prayer}`);
+      if (savedAdhan !== null) {
+        setSelectedAdhan(savedAdhan);
+      }
+      if (savedReminder !== null) {
+        setSelectedReminder(savedReminder);
       }
     } catch (error) {
-      console.error('Error loading preference:', error);
+      console.error('Error loading preferences:', error);
     }
   };
 
-  const savePreference = async (preference) => {
+  const savePreferences = async (adhanPref, reminderPref) => {
     try {
-      await AsyncStorage.setItem(`adhan_preference_${prayer}`, preference);
+      if (adhanPref) {
+        await AsyncStorage.setItem(`adhan_preference_${prayer}`, adhanPref);
+      }
+      if (reminderPref) {
+        await AsyncStorage.setItem(`reminder_preference_${prayer}`, reminderPref);
+      }
     } catch (error) {
-      console.error('Error saving preference:', error);
+      console.error('Error saving preferences:', error);
     }
   };
 
@@ -55,7 +66,7 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPref
     { name: 'Adhan (Nureyn Mohammad)', image: require('../assets/adhan-icon.png'), flag: '🇸🇩', country: 'Sudan', sound: require('../assets/adhan.mp3') },
     { name: 'Adhan (Madina)', image: require('../assets/adhan-icon.png'), flag: '🇸🇦', country: 'Saudi Arabia', sound: require('../assets/madinah_adhan.mp3') },
     { name: 'Adhan (Makka)', image: require('../assets/adhan-icon.png'), flag: '🇸🇦', country: 'Saudi Arabia', sound: require('../assets/makkah_adhan.mp3') },
-    { name: 'Long beep', icon: 'alarm-outline' }
+    { name: 'Long beep', icon: 'alarm-outline', sound: require('../assets/long_beep.mp3') }
   ];
 
   async function playSound(soundFile, adhanName) {
@@ -119,11 +130,58 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPref
     onClose();
   };
 
+  const handleReminderSelection = (option) => {
+    setSelectedReminder(option.name);
+    savePreferences(null, option.name);
+    onPreferenceChange(prayer, selectedAdhan, option.name);
+  };
+
   const handleAdhanSelection = (option) => {
     setSelectedAdhan(option.name);
-    onPreferenceChange(prayer, option.name);
-    savePreference(option.name);
+    savePreferences(option.name, null);
+    onPreferenceChange(prayer, option.name, selectedReminder);
   };
+
+  const reminderOptions = [
+    { name: 'None', icon: 'ban-outline' },
+    { name: '5 minutes before', icon: 'time-outline' },
+    { name: '10 minutes before', icon: 'time-outline' },
+    { name: '15 minutes before', icon: 'time-outline' },
+    { name: '30 minutes before', icon: 'time-outline' },
+    { name: '1 hour before', icon: 'time-outline' },
+  ];
+
+  const renderReminderDropdown = (options, selectedValue, onValueChange, label) => (
+    <View style={[styles.dropdownContainer, { borderColor: themeColors.separatorColor }]}>
+      <Text style={[styles.dropdownLabel, { color: themeColors.secondaryTextColor }]}>
+        {label}
+      </Text>
+      <View style={[
+        styles.pickerContainer, 
+        { 
+          backgroundColor: themeColors.backgroundColor,
+          borderColor: themeColors.separatorColor 
+        }
+      ]}>
+        <Picker
+          selectedValue={selectedValue}
+          onValueChange={onValueChange}
+          dropdownIconColor={themeColors.textColor}
+          style={[styles.picker, { color: themeColors.textColor }]}
+          mode="dropdown"
+        >
+          {options.map((option, index) => (
+            <Picker.Item 
+              key={index}
+              label={option.name}
+              value={option.name}
+              color={themeColors.textColor}
+            />
+          ))}
+        </Picker>
+      </View>
+    </View>
+  );
 
   return (
     <Modal
@@ -156,12 +214,18 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPref
             <Text style={[styles.modalTitle, { color: themeColors.textColor }]}>{prayer}</Text>
           </View>
           <View style={[styles.separator, { backgroundColor: themeColors.separatorColor }]} />
+          
+          {/* Pre-Adhan Reminder Dropdown */}
+          {renderReminderDropdown(
+            reminderOptions,
+            selectedReminder,
+            (value) => handleReminderSelection({ name: value }),
+            "Pre-Adhan Reminder"
+          )}
+
+          {/* Adhan Options List */}
+          <Text style={[styles.sectionTitle, { color: themeColors.secondaryTextColor }]}>Adhan Sound</Text>
           <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={[styles.sectionTitle, { color: themeColors.secondaryTextColor }]}>Pre-Adhan Reminder</Text>
-            <TouchableOpacity style={[styles.optionItem, styles.optionItemFirst]}>
-              <Text style={[styles.optionText, { color: themeColors.textColor }]}>None</Text>
-            </TouchableOpacity>
-            <Text style={[styles.sectionTitle, { color: themeColors.secondaryTextColor }]}>Adhan Preferences</Text>
             {adhanOptions.map((option, index) => (
               <TouchableOpacity
                 key={index}
@@ -275,6 +339,7 @@ const styles = StyleSheet.create({
   },
   selectedOption: {
     borderWidth: 1,
+    borderColor: 'rgba(128, 128, 128, 0.2)',
   },
   optionLeft: {
     flexDirection: 'row',
@@ -298,11 +363,35 @@ const styles = StyleSheet.create({
   },
   previewButton: {
     marginLeft: 10,
+    padding: 5,
+  },
+  previewText: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: '500',
   },
   optionIcon: {
     width: 24,
     height: 24,
     resizeMode: 'contain',
+  },
+  dropdownContainer: {
+    marginBottom: 20,
+    padding: 10,
+  },
+  dropdownLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  pickerContainer: {
+    borderRadius: 10,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  picker: {
+    height: 50,
+    width: '100%',
   },
 });
 

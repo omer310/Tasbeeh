@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Image, ImageBackground, Animated, Easing, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Image, ImageBackground, Animated, Easing, Alert, TouchableOpacity, Dimensions } from 'react-native';
 import * as Location from 'expo-location';
-import Svg, { Polygon, Rect } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 
 export default function QiblaDirection({ themeColors, language }) {
   const [qiblaDirection, setQiblaDirection] = useState(null);
@@ -119,7 +119,7 @@ export default function QiblaDirection({ themeColors, language }) {
   };
 
   const getArrowColor = (angleDifference) => {
-    let hue = 120 - (angleDifference / 180) * 120;
+    const hue = (1 - angleDifference / 180) * 120; // 0 is red, 120 is green
     return `hsl(${hue}, 100%, 50%)`;
   };
 
@@ -171,6 +171,55 @@ export default function QiblaDirection({ themeColors, language }) {
     outputRange: ['0deg', '360deg'],
   });
 
+  const ArrowWithHead = ({ rotation, color }) => {
+    const { width, height } = Dimensions.get('window');
+    const screenSize = Math.min(width, height);
+    const arrowSize = screenSize * 0.8; // 80% of the smaller screen dimension
+    const headSize = screenSize * 0.15; // 15% of the smaller screen dimension
+    const shaftWidth = screenSize * 0.025; // 2.5% of the smaller screen dimension
+
+    return (
+      <Animated.View
+        style={[
+          styles.qiblaArrow,
+          {
+            transform: [{ rotate: `${rotation}deg` }],
+            width: arrowSize,
+            height: arrowSize,
+          },
+        ]}
+      >
+        <Svg
+          width={arrowSize}
+          height={arrowSize}
+          viewBox={`0 0 ${arrowSize} ${arrowSize}`}
+          style={styles.arrowShaft}
+        >
+          <Path
+            d={`M ${arrowSize / 2} ${arrowSize - (arrowSize * 0.2)} L ${arrowSize / 2} ${headSize + (arrowSize * 0.1)}`}
+            stroke={color}
+            strokeWidth={shaftWidth}
+            strokeLinecap="round"
+          />
+        </Svg>
+        <Image
+          source={require('../assets/Qibla-head.png')}
+          style={[
+            styles.arrowHead,
+            {
+              width: headSize,
+              height: headSize,
+              position: 'absolute',
+              top: arrowSize * 0.1,
+              left: (arrowSize - headSize) / 2,
+            },
+          ]}
+          resizeMode="contain"
+        />
+      </Animated.View>
+    );
+  };
+
   return (
     <ImageBackground
       source={require('../assets/islamic-pattern4.png')}
@@ -191,25 +240,11 @@ export default function QiblaDirection({ themeColors, language }) {
           </View>
 
           <View style={styles.compassContainer}>
-            <Image source={require('../assets/qibla-compass.png')} style={styles.compassRose} />
-            <Animated.View
-              style={[
-                styles.qiblaArrow,
-                {
-                  transform: [{ rotate: `${arrowRotation}deg` }],
-                },
-              ]}
-            >
-              <Svg height="150" width="150" viewBox="0 0 100 100">
-                <Polygon
-                  points="50,10 60,40 50,35 40,40"
-                  fill={arrowColor}
-                  stroke={arrowColor}
-                  strokeWidth="1"
-                />
-                <Rect x="48" y="35" width="4" height="40" fill={arrowColor} />
-              </Svg>
-            </Animated.View>
+            <Image source={require('../assets/islamic-pattern6.png')} style={styles.compassRose} />
+            <ArrowWithHead
+              rotation={arrowRotation}
+              color={getArrowColor(angleDifference)}
+            />
           </View>
 
           <View style={styles.accuracyContainer}>
@@ -263,21 +298,33 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   compassContainer: {
-    width: 300,
-    height: 300,
+    width: 350,  // Increased from 300
+    height: 350, // Increased from 300
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20, // Added margin
+    marginBottom: 20,
   },
   compassRose: {
-    width: 300,
-    height: 300,
+    width: 350,  // Increased from 300
+    height: 350, // Increased from 300
     position: 'absolute',
   },
   qiblaArrow: {
     position: 'absolute',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  arrowShaft: {
+    position: 'absolute',
+
+  },
+  arrowHead: {
+    position: 'absolute',
+  },
+  needleImage: {
+    width: 300,  // Increased from 150
+    height: 300, // Increased from 150
+    resizeMode: 'contain',
   },
   degrees: {
     fontSize: 48, // Increased font size
