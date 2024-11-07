@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Image, ImageBackground, Animated, Easing, Alert, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, ImageBackground, Animated, Easing, Alert, TouchableOpacity, Dimensions, Vibration } from 'react-native';
 import * as Location from 'expo-location';
 import Svg, { Path } from 'react-native-svg';
 
@@ -103,6 +103,16 @@ export default function QiblaDirection({ themeColors, language }) {
     }
   }, [headingAccuracy]);
 
+  useEffect(() => {
+    if (qiblaDirection && compassHeading) {
+      const angleDifference = Math.abs(((qiblaDirection - compassHeading + 540) % 360) - 180);
+      if (angleDifference < 10) {
+        // Vibrate when facing Qibla (within 10 degrees)
+        Vibration.vibrate(200);
+      }
+    }
+  }, [qiblaDirection, compassHeading]);
+
   const fetchQiblaDirection = async (latitude, longitude) => {
     try {
       const response = await fetch(`https://api.aladhan.com/v1/qibla/${latitude}/${longitude}`);
@@ -171,52 +181,39 @@ export default function QiblaDirection({ themeColors, language }) {
     outputRange: ['0deg', '360deg'],
   });
 
-  const ArrowWithHead = ({ rotation, color }) => {
+  const Compass = ({ rotation }) => {
     const { width, height } = Dimensions.get('window');
     const screenSize = Math.min(width, height);
-    const arrowSize = screenSize * 0.8; // 80% of the smaller screen dimension
-    const headSize = screenSize * 0.15; // 15% of the smaller screen dimension
-    const shaftWidth = screenSize * 0.025; // 2.5% of the smaller screen dimension
+    const compassSize = screenSize * 0.8;
+    const needleSize = compassSize * 0.3; // Adjust needle size as needed
 
     return (
-      <Animated.View
-        style={[
-          styles.qiblaArrow,
-          {
-            transform: [{ rotate: `${rotation}deg` }],
-            width: arrowSize,
-            height: arrowSize,
-          },
-        ]}
-      >
-        <Svg
-          width={arrowSize}
-          height={arrowSize}
-          viewBox={`0 0 ${arrowSize} ${arrowSize}`}
-          style={styles.arrowShaft}
-        >
-          <Path
-            d={`M ${arrowSize / 2} ${arrowSize - (arrowSize * 0.2)} L ${arrowSize / 2} ${headSize + (arrowSize * 0.1)}`}
-            stroke={color}
-            strokeWidth={shaftWidth}
-            strokeLinecap="round"
-          />
-        </Svg>
+      <View style={[styles.compassWrapper, { width: compassSize, height: compassSize }]}>
+        {/* Stationary Needle */}
         <Image
-          source={require('../assets/Qibla-head.png')}
-          style={[
-            styles.arrowHead,
-            {
-              width: headSize,
-              height: headSize,
-              position: 'absolute',
-              top: arrowSize * 0.1,
-              left: (arrowSize - headSize) / 2,
-            },
-          ]}
+          source={require('../assets/qibla-needle.png')}
+          style={[styles.needle, { width: needleSize, height: needleSize }]}
           resizeMode="contain"
         />
-      </Animated.View>
+        
+        {/* Rotating Compass */}
+        <Animated.View
+          style={[
+            styles.compassRotation,
+            {
+              transform: [{ rotate: rotation }],
+              width: compassSize,
+              height: compassSize,
+            },
+          ]}
+        >
+          <Image
+            source={require('../assets/qibla-compass2.png')}
+            style={styles.compass}
+            resizeMode="contain"
+          />
+        </Animated.View>
+      </View>
     );
   };
 
@@ -240,10 +237,11 @@ export default function QiblaDirection({ themeColors, language }) {
           </View>
 
           <View style={styles.compassContainer}>
-            <Image source={require('../assets/islamic-pattern6.png')} style={styles.compassRose} />
-            <ArrowWithHead
-              rotation={arrowRotation}
-              color={getArrowColor(angleDifference)}
+            <Compass
+              rotation={rotationAnimation.interpolate({
+                inputRange: [0, 360],
+                outputRange: ['360deg', '0deg'], // Reversed to make compass rotate correctly
+              })}
             />
           </View>
 
@@ -381,5 +379,23 @@ const styles = StyleSheet.create({
   calibrateButtonText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  compassWrapper: {
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  compassRotation: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  compass: {
+    width: '100%',
+    height: '100%',
+  },
+  needle: {
+    position: 'absolute',
+    zIndex: 2, // Ensure needle stays on top
   },
 });
