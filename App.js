@@ -252,6 +252,7 @@ export default function App() {
   const [notification, setNotification] = useState(false);
   const notificationListener = useRef();
   const responseListener = useRef();
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -456,7 +457,7 @@ export default function App() {
           )}
         </Tab.Screen>
         <Tab.Screen name="Qibla">
-          {(props) => <QiblaDirection {...props} themeColors={themeColors} language={language} />}
+          {(props) => <QiblaDirection isDarkMode={isDarkMode} language={language} />}
         </Tab.Screen>
         <Tab.Screen name="Calendar">
           {(props) => (
