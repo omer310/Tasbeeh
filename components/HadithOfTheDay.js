@@ -24,13 +24,23 @@ const EDITIONS = [
 ];
 
 const translations = {
-  hadithSearch: { en: 'Hadith Search', ar: 'بحث الحديث' },
+  hadithSearch: { en: 'Hadith Search', ar: 'بحث الاحاديث' },
   searchPlaceholder: { en: 'Search for a hadith...', ar: 'ابحث عن حديث...' },
   search: { en: 'Search', ar: 'بحث' },
   getRandomHadith: { en: 'Get Random Hadith', ar: 'احصل على حديث عشوائي' },
   noHadithsFound: { en: 'No hadiths found.', ar: 'لم يتم العثور على أحاديث.' },
   hadith: { en: 'Hadith', ar: 'حديث' },
   close: { en: 'Close', ar: 'إغلاق' },
+  relevance: { en: 'Relevance', ar: 'الصلة' },
+  relevanceExplanation: { 
+    en: 'Higher score means more matches found', 
+    ar: 'الدرجة الأعلى تعني المزيد من التطابقات'
+  },
+  searching: { en: 'Searching...', ar: 'جاري البحث...' },
+  searchingInBook: { 
+    en: 'Searching in', 
+    ar: 'جاري البحث في' 
+  },
 };
 
 export default function HadithOfTheDay({ themeColors, language }) {
@@ -82,21 +92,46 @@ export default function HadithOfTheDay({ themeColors, language }) {
       const engHadiths = engResponse.data.hadiths;
       const araHadiths = araResponse.data.hadiths;
       
-      const foundHadiths = engHadiths.filter(h => 
-        h.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        h.hadithnumber.toString() === searchTerm ||
-        araHadiths.find(ah => ah.hadithnumber === h.hadithnumber).text.includes(searchTerm)
-      );
+      const searchTerms = searchTerm
+        .split(' ')
+        .filter(term => term.length > 0)
+        .map(term => term.trim());
       
-      if (foundHadiths.length > 0) {
-        setHadiths(foundHadiths.map(h => ({
+      const foundHadiths = engHadiths.filter(h => {
+        const engText = h.text.toLowerCase();
+        const araText = araHadiths.find(ah => ah.hadithnumber === h.hadithnumber).text;
+        const hadithNumber = h.hadithnumber.toString();
+
+        return searchTerms.some(term => {
+          const normalizedAraText = araText.normalize('NFKD').replace(/[\u064B-\u065F]/g, '');
+          const normalizedSearchTerm = term.normalize('NFKD').replace(/[\u064B-\u065F]/g, '');
+          
+          const isArabic = /[\u0600-\u06FF]/.test(term);
+          
+          if (isArabic) {
+            return normalizedAraText.includes(normalizedSearchTerm);
+          } else {
+            return engText.includes(term.toLowerCase()) || hadithNumber === term;
+          }
+        });
+      });
+      
+      const sortedHadiths = foundHadiths.sort((a, b) => {
+        const scoreA = calculateRelevanceScore(a, searchTerms, araHadiths);
+        const scoreB = calculateRelevanceScore(b, searchTerms, araHadiths);
+        return scoreB - scoreA;
+      });
+      
+      if (sortedHadiths.length > 0) {
+        setHadiths(sortedHadiths.map(h => ({
           engText: h.text,
           araText: araHadiths.find(ah => ah.hadithnumber === h.hadithnumber).text,
           collection: EDITIONS.find(e => e.value === selectedEdition).label,
-          hadithnumber: h.hadithnumber
+          hadithnumber: h.hadithnumber,
+          relevanceScore: calculateRelevanceScore(h, searchTerms, araHadiths)
         })));
       } else {
-        setError('No hadiths found with the given search term.');
+        setError(getTranslatedText('noHadithsFound'));
       }
     } catch (error) {
       console.error('Error searching hadith:', error);
@@ -104,6 +139,33 @@ export default function HadithOfTheDay({ themeColors, language }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const calculateRelevanceScore = (hadith, searchTerms, araHadiths) => {
+    const engText = hadith.text.toLowerCase();
+    const araText = araHadiths.find(ah => ah.hadithnumber === hadith.hadithnumber).text;
+    const normalizedAraText = araText.normalize('NFKD').replace(/[\u064B-\u065F]/g, '');
+    const hadithNumber = hadith.hadithnumber.toString();
+
+    let score = 0;
+    searchTerms.forEach(term => {
+      const normalizedSearchTerm = term.normalize('NFKD').replace(/[\u064B-\u065F]/g, '');
+      const isArabic = /[\u0600-\u06FF]/.test(term);
+
+      if (isArabic) {
+        const araMatches = (normalizedAraText.match(new RegExp(normalizedSearchTerm, 'g')) || []).length;
+        score += araMatches * 1.2;
+      } else {
+        const engMatches = (engText.match(new RegExp(term.toLowerCase(), 'g')) || []).length;
+        score += engMatches;
+      }
+
+      if (hadithNumber === term) {
+        score += 10;
+      }
+    });
+    
+    return Math.round(score);
   };
 
   const renderHadith = useCallback(({ item }) => (
@@ -114,8 +176,38 @@ export default function HadithOfTheDay({ themeColors, language }) {
         borderRadius: 15,
       }
     ]}>
-      <Text style={[styles.hadithText, { color: themeColors.textColor }]}>{item.engText}</Text>
-      <Text style={[styles.arabicText, { color: themeColors.textColor }]}>{item.araText}</Text>
+      <View style={styles.hadithHeader}>
+        <Text style={[styles.hadithNumber, { color: themeColors.secondaryTextColor }]}>
+          #{item.hadithnumber}
+        </Text>
+        {item.relevanceScore > 0 && (
+          <TouchableOpacity 
+            style={[styles.relevanceBadge, { backgroundColor: themeColors.primary + '20' }]}
+            onPress={() => alert(getTranslatedText('relevanceExplanation'))}
+          >
+            <Text style={[styles.relevanceText, { color: themeColors.primary }]}>
+              {getTranslatedText('relevance')}: {item.relevanceScore} ⓘ
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      
+      {language === 'ar' ? (
+        // Arabic mode - show Arabic first
+        <>
+          <Text style={[styles.arabicText, { color: themeColors.textColor }]}>{item.araText}</Text>
+          <View style={styles.separator} />
+          <Text style={[styles.hadithText, { color: themeColors.textColor }]}>{item.engText}</Text>
+        </>
+      ) : (
+        // English mode - show English first
+        <>
+          <Text style={[styles.hadithText, { color: themeColors.textColor }]}>{item.engText}</Text>
+          <View style={styles.separator} />
+          <Text style={[styles.arabicText, { color: themeColors.textColor }]}>{item.araText}</Text>
+        </>
+      )}
+      
       <Text style={[styles.hadithReference, { color: themeColors.secondaryTextColor }]}>
         - {language === 'ar' ? EDITIONS.find(e => e.value === selectedEdition).labelAr : item.collection}, 
         {getTranslatedText('hadith')} {item.hadithnumber}
@@ -145,14 +237,41 @@ export default function HadithOfTheDay({ themeColors, language }) {
           placeholderTextColor={themeColors.secondaryTextColor}
           value={searchTerm}
           onChangeText={onChangeSearchTerm}
+          editable={!loading}
         />
-        <TouchableOpacity style={[styles.button, { backgroundColor: themeColors.primary }]} onPress={onPressSearch}>
-          <Text style={[styles.buttonText, { color: themeColors.backgroundColor }]}>{getTranslatedText('search')}</Text>
+        <TouchableOpacity 
+          style={[
+            styles.button, 
+            { backgroundColor: themeColors.primary },
+            loading && styles.buttonDisabled
+          ]} 
+          onPress={onPressSearch}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color={themeColors.backgroundColor} />
+          ) : (
+            <Text style={[styles.buttonText, { color: themeColors.backgroundColor }]}>
+              {getTranslatedText('search')}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
+      {loading && (
+        <View style={styles.searchingIndicator}>
+          <Text style={[styles.searchingText, { color: themeColors.textColor }]}>
+            {getTranslatedText('searchingInBook')} {' '}
+            {language === 'ar' 
+              ? EDITIONS.find(e => e.value === selectedEdition).labelAr 
+              : EDITIONS.find(e => e.value === selectedEdition).label}
+            ...
+          </Text>
+        </View>
+      )}
       <TouchableOpacity 
         style={[styles.pickerButton, { borderColor: themeColors.textColor }]} 
         onPress={() => setPickerVisible(true)}
+        disabled={loading}
       >
         <Text style={[styles.pickerButtonText, { color: themeColors.textColor }]}>
           {language === 'ar' 
@@ -160,11 +279,17 @@ export default function HadithOfTheDay({ themeColors, language }) {
             : EDITIONS.find(e => e.value === selectedEdition).label}
         </Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.button, { backgroundColor: themeColors.primary }]} onPress={onPressRandom}>
-        <Text style={[styles.buttonText, { color: themeColors.backgroundColor }]}>{getTranslatedText('getRandomHadith')}</Text>
+      <TouchableOpacity 
+        style={[styles.button, { backgroundColor: themeColors.primary }]} 
+        onPress={onPressRandom}
+        disabled={loading}
+      >
+        <Text style={[styles.buttonText, { color: themeColors.backgroundColor }]}>
+          {getTranslatedText('getRandomHadith')}
+        </Text>
       </TouchableOpacity>
     </View>
-  ), [themeColors, searchTerm, selectedEdition, language, onChangeSearchTerm, onPressSearch, onPressRandom]);
+  ), [themeColors, searchTerm, selectedEdition, language, onChangeSearchTerm, onPressSearch, onPressRandom, loading]);
 
   const renderPickerModal = () => (
     <Modal
@@ -218,7 +343,12 @@ export default function HadithOfTheDay({ themeColors, language }) {
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator size="large" color={themeColors.primary} />
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={themeColors.primary} />
+              <Text style={[styles.loadingText, { color: themeColors.textColor }]}>
+                {getTranslatedText('searching')}
+              </Text>
+            </View>
           ) : error ? (
             <Text style={[styles.error, { color: themeColors.textColor }]}>{error}</Text>
           ) : (
@@ -288,14 +418,16 @@ const styles = StyleSheet.create({
   hadithText: {
     fontSize: 16,
     lineHeight: 24,
-    marginBottom: 10,
+    marginBottom: 15,
+    direction: 'ltr',
   },
   arabicText: {
-    fontSize: 18,
-    lineHeight: 30,
-    marginBottom: 10,
+    fontSize: 20,
+    lineHeight: 36,
+    marginBottom: 15,
     textAlign: 'right',
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+    direction: 'rtl',
   },
   hadithReference: {
     fontSize: 14,
@@ -355,6 +487,55 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   separator: {
-    height: 20,
+    height: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    marginVertical: 10,
+  },
+  hadithHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  hadithNumber: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  relevanceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  relevanceText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+  searchingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  searchingText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
 });

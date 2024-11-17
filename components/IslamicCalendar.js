@@ -6,6 +6,39 @@ import { useTheme } from '@react-navigation/native';
 import moment from 'moment-hijri';
 
 const DAYS_OF_WEEK = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const DAYS_OF_WEEK_AR = [
+  'الأحد',    // Sunday
+  'الإثنين',  // Monday  
+  'الثلاثاء', // Tuesday
+  'الأربعاء', // Wednesday
+  'خميس',   // Thursday
+  'الجمعة',   // Friday
+  'السبت'     // Saturday
+];
+
+const ISLAMIC_MONTHS = [
+  'Muharram', 'Safar', 'Rabi al-awwal', 'Rabi al-thani', 'Jumada al-awwal', 'Jumada al-thani',
+  'Rajab', "Sha'ban", 'Ramadan', 'Shawwal', 'Dhu al-Qadah', 'Dhu al-Hijjah'
+];
+
+const EVENTS_AR = {
+  "Islamic New Year": "رأس السنة الهجرية",
+  "Day of Ashura": "يوم عاشوراء",
+  "Mawlid al-Nabi": "المولد النبوي",
+  "Lailat al Miraj": "ليلة المعراج",
+  "Laylat al Bara'at": "ليلة البراءة",
+  "Ramadan (start)": "بداية رمضان",
+  "Laylat al-Qadr": "ليلة القدر",
+  "Eid al-Fitr": "عيد الفطر",
+  "Day of Arafah": "يوم عرفة",
+  "Eid al-Adha": "عيد الأضحى"
+};
+
+// Add these Arabic month names at the top with other constants
+const GREGORIAN_MONTHS_AR = [
+  'يناير', 'فبراير', 'مارس', 'إبريل', 'مايو', 'يونيو',
+  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+];
 
 // Helper function to parse date strings with UTC
 const parseDateStringUTC = (dateString) => {
@@ -16,7 +49,7 @@ const parseDateStringUTC = (dateString) => {
 // Function to normalize month names
 const normalizeMonthName = (monthName) => monthName.toLowerCase().replace(/[^a-z]/g, '');
 
-const IslamicCalendar = ({ themeColors }) => {
+const IslamicCalendar = ({ themeColors, language = 'en' }) => {
   const { colors } = useTheme();
   const [calendarData, setCalendarData] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -129,9 +162,9 @@ const IslamicCalendar = ({ themeColors }) => {
     }
   };
 
-  const ISLAMIC_MONTHS = [
-    'Muharram', 'Safar', 'Rabi al-awwal', 'Rabi al-thani', 'Jumada al-awwal', 'Jumada al-thani',
-    'Rajab', "Sha'ban", 'Ramadan', 'Shawwal', 'Dhu al-Qadah', 'Dhu al-Hijjah'
+  const ISLAMIC_MONTHS_AR = [
+    'محرم', 'صفر', 'ربيع الأول', 'ربيع الثاني', 'جمادى الأولى', 'جمادى الآخرة',
+    'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'
   ];
 
   // Updated isCurrentDay function
@@ -187,10 +220,10 @@ const IslamicCalendar = ({ themeColors }) => {
               onPress={() => handleDatePress(date)}
             >
               <Text style={[styles.dayNumber, isToday && styles.currentDayText, { color: isSelected || isImportant ? '#fff' : colors.text }]}>
-                {date.gregorian.day}
+                {language === 'ar' ? convertToArabicNumbers(date.gregorian.day) : date.gregorian.day}
               </Text>
               <Text style={[styles.hijriDay, isToday && styles.currentDayText, { color: isSelected || isImportant ? '#fff' : colors.text }]}>
-                {date.hijri.day}
+                {language === 'ar' ? convertToArabicNumbers(date.hijri.day) : date.hijri.day}
               </Text>
             </TouchableOpacity>
           );
@@ -200,7 +233,17 @@ const IslamicCalendar = ({ themeColors }) => {
           row.push(<View key={`empty-end-${i}-${j}`} style={styles.emptyDay} />);
         }
       }
-      days.push(<View key={`row-${i}`} style={styles.week}>{row}</View>);
+      days.push(
+        <View 
+          key={`row-${i}`} 
+          style={[
+            styles.week,
+            language === 'ar' && { flexDirection: 'row-reverse' }
+          ]}
+        >
+          {row}
+        </View>
+      );
     }
 
     return (
@@ -212,6 +255,9 @@ const IslamicCalendar = ({ themeColors }) => {
 
   const getHeaderDate = () => {
     if (selectedDate) {
+      if (language === 'ar') {
+        return `${convertToArabicNumbers(selectedDate.hijri.day)} ${ISLAMIC_MONTHS_AR[parseInt(selectedDate.hijri.month.number) - 1]} ${convertToArabicNumbers(selectedDate.hijri.year)} هـ`;
+      }
       return `${selectedDate.hijri.day} ${selectedDate.hijri.month.en} ${selectedDate.hijri.year} AH`;
     }
     return '';
@@ -219,60 +265,150 @@ const IslamicCalendar = ({ themeColors }) => {
 
   const getSubHeaderDate = () => {
     if (selectedDate) {
+      if (language === 'ar') {
+        const arabicDay = convertToArabicNumbers(selectedDate.gregorian.day);
+        const monthIndex = parseInt(selectedDate.gregorian.month.number) - 1;
+        const arabicYear = convertToArabicNumbers(selectedDate.gregorian.year);
+        return `${GREGORIAN_MONTHS_AR[monthIndex]} ${arabicDay}، ${arabicYear}`;
+      }
       return `${selectedDate.gregorian.month.en} ${selectedDate.gregorian.day}, ${selectedDate.gregorian.year}`;
     }
     return '';
   };
 
+  const convertToArabicNumbers = (num) => {
+    const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    return num.toString().split('').map(digit => arabicNumbers[digit]).join('');
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themeColors.backgroundColor }]}>
       <View style={[styles.header, { backgroundColor: colors.card }]}>
-        <View>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>{getHeaderDate()}</Text>
-          <Text style={[styles.headerSubtitle, { color: colors.text }]}>{getSubHeaderDate()}</Text>
+        <View style={language === 'ar' ? styles.headerRTL : styles.headerLTR}>
+          <Text style={[
+            styles.headerTitle, 
+            { color: colors.text },
+            language === 'ar' && styles.arabicText
+          ]}>
+            {getHeaderDate()}
+          </Text>
+          <Text style={[
+            styles.headerSubtitle, 
+            { color: colors.text },
+            language === 'ar' && styles.arabicText
+          ]}>
+            {getSubHeaderDate()}
+          </Text>
         </View>
       </View>
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
         <View style={[styles.calendarContainer, { backgroundColor: colors.card }]}>
-          <View style={styles.monthNavigation}>
+          <View style={[
+            styles.monthNavigation,
+            language === 'ar' && { flexDirection: 'row-reverse' }
+          ]}>
             <TouchableOpacity onPress={() => changeMonth(-1)}>
-              <Icon name="chevron-left" size={30} color="#4CAF50" />
+              <Icon name={language === 'ar' ? "chevron-left" : "chevron-right"} size={30} color="#4CAF50" />
             </TouchableOpacity>
-            <Text style={[styles.currentMonth, { color: colors.text }]}>
-              {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+            <Text style={[
+              styles.currentMonth, 
+              { color: colors.text },
+              language === 'ar' && styles.arabicText
+            ]}>
+              {language === 'ar' 
+                ? `${GREGORIAN_MONTHS_AR[currentDate.getMonth()]} ${convertToArabicNumbers(currentDate.getFullYear())}`
+                : currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })
+              }
             </Text>
             <TouchableOpacity onPress={() => changeMonth(1)}>
-              <Icon name="chevron-right" size={30} color="#4CAF50" />
+              <Icon name={language === 'ar' ? "chevron-right" : "chevron-left"} size={30} color="#4CAF50" />
             </TouchableOpacity>
           </View>
-          <View style={styles.daysOfWeek}>
-            {DAYS_OF_WEEK.map((day, index) => (
-              <Text key={index} style={[styles.dayOfWeek, index === 5 && styles.friday, { color: colors.text }]}>{day}</Text>
+          <View style={[
+            styles.daysOfWeek,
+            language === 'ar' && { flexDirection: 'row-reverse' }
+          ]}>
+            {(language === 'ar' ? DAYS_OF_WEEK_AR : DAYS_OF_WEEK).map((day, index) => (
+              <Text key={index} style={[
+                styles.dayOfWeek, 
+                index === 5 && styles.friday, 
+                { color: colors.text },
+                language === 'ar' && styles.arabicText
+              ]}>
+                {day}
+              </Text>
             ))}
           </View>
           {renderCalendarGrid()}
         </View>
         <View style={[styles.eventsContainer, { backgroundColor: colors.card }]}>
-          <Text style={[styles.eventsTitle, { color: colors.text }]}>Islamic Events</Text>
+          <Text style={[
+            styles.eventsTitle, 
+            { color: colors.text },
+            language === 'ar' && { textAlign: 'right', width: '100%' }
+          ]}>
+            {language === 'ar' ? 'المناسبات الإسلامية' : 'Islamic Events'}
+          </Text>
           {currentEvents.map((event, index) => {
-            // Convert Hijri to Gregorian using moment-hijri
             const hijriDate = moment(`${event.hijriYear}-${event.hijriMonth}-${event.hijriDay}`, 'iYYYY-iM-iD');
             const gregorianDate = hijriDate.format('MMMM D, YYYY');
             
+            const gregorianDateAr = language === 'ar' ? (() => {
+              const gDate = new Date(gregorianDate);
+              const day = convertToArabicNumbers(gDate.getDate());
+              const month = GREGORIAN_MONTHS_AR[gDate.getMonth()];
+              const year = convertToArabicNumbers(gDate.getFullYear());
+              return `${month} ${day}، ${year}`;
+            })() : gregorianDate;
+            
             return (
-              <TouchableOpacity key={index} style={styles.eventItem} onPress={() => navigateToEventDate(event)}>
-                <View>
-                  <Text style={[styles.eventName, { color: colors.text }]}>{event.name}</Text>
-                  <Text style={[styles.eventDescription, { color: '#4CAF50' }]}>
-                    {`${event.hijriDay} ${ISLAMIC_MONTHS[event.hijriMonth - 1]} ${event.hijriYear} AH`}
-                  </Text>
-                  <Text style={[styles.gregorianDate, { color: colors.text }]}>
-                    {gregorianDate}
-                  </Text>
+              <TouchableOpacity 
+                key={index} 
+                style={[
+                  styles.eventItem,
+                  language === 'ar' && styles.eventItemRTL
+                ]} 
+                onPress={() => navigateToEventDate(event)}
+              >
+                <View style={[
+                  styles.eventContent,
+                  language === 'ar' && styles.eventContentRTL
+                ]}>
+                  <View style={language === 'ar' ? { width: '100%' } : null}>
+                    <Text style={[
+                      styles.eventName, 
+                      { color: colors.text },
+                      language === 'ar' && styles.eventTextRTL
+                    ]}>
+                      {language === 'ar' ? EVENTS_AR[event.name] : event.name}
+                    </Text>
+                    <Text style={[
+                      styles.eventDescription, 
+                      { color: '#4CAF50' }, 
+                      language === 'ar' && styles.eventTextRTL
+                    ]}>
+                      {language === 'ar' 
+                        ? `${convertToArabicNumbers(event.hijriDay)} ${ISLAMIC_MONTHS_AR[event.hijriMonth - 1]} ${convertToArabicNumbers(event.hijriYear)} هـ`
+                        : `${event.hijriDay} ${ISLAMIC_MONTHS[event.hijriMonth - 1]} ${event.hijriYear} AH`
+                      }
+                    </Text>
+                    <Text style={[
+                      styles.gregorianDate, 
+                      { color: colors.text },
+                      language === 'ar' && styles.eventTextRTL
+                    ]}>
+                      {language === 'ar' ? gregorianDateAr : gregorianDate}
+                    </Text>
+                  </View>
+                  {language !== 'ar' && (
+                    <TouchableOpacity 
+                      style={styles.infoButton}
+                      onPress={() => handleEventInfoPress(event)}
+                    >
+                      <Icon name="info-outline" size={24} color="#4CAF50" />
+                    </TouchableOpacity>
+                  )}
                 </View>
-                <TouchableOpacity onPress={() => handleEventInfoPress(event)}>
-                  <Icon name="info-outline" size={24} color="#4CAF50" />
-                </TouchableOpacity>
               </TouchableOpacity>
             );
           })}
@@ -317,11 +453,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    marginLeft: 16,
+    marginHorizontal: 16,
   },
   headerSubtitle: {
     fontSize: 14,
-    marginLeft: 16,
+    marginHorizontal: 16,
     opacity: 0.7,
   },
   calendarContainer: {
@@ -353,6 +489,7 @@ const styles = StyleSheet.create({
     width: 40,
     textAlign: 'center',
     fontWeight: 'bold',
+    fontSize: 14,
   },
   friday: {
     color: '#4CAF50',
@@ -400,14 +537,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 16,
+    width: '100%',
   },
   eventItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+    width: '100%',
+  },
+  eventItemRTL: {
+    flexDirection: 'row-reverse',
   },
   eventName: {
     fontSize: 16,
@@ -464,6 +603,40 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.7,
     marginTop: 2,
+  },
+  arabicText: {
+    fontFamily: 'System',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  headerLTR: {
+    alignItems: 'flex-start',
+  },
+  headerRTL: {
+    alignItems: 'flex-end',
+    width: '100%',
+  },
+  eventContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
+  eventContentRTL: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+  },
+  eventTextRTL: {
+    textAlign: 'right',
+    width: '100%',
+  },
+  infoButton: {
+    padding: 5,
+    marginLeft: 10,
+  },
+  infoButtonRTL: {
+    padding: 5,
+    marginRight: 10,
   },
 });
 

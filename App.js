@@ -25,6 +25,8 @@ import Constants from 'expo-constants';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
 import ErrorBoundary from './components/ErrorBoundary';
+import { Audio } from 'expo-av';
+import { BACKGROUND_NOTIFICATION_TASK } from './constants/NotificationConstants';
 
 const Tab = createBottomTabNavigator();
 const DuasStack = createStackNavigator();
@@ -32,11 +34,15 @@ const DuasStack = createStackNavigator();
 const BACKGROUND_FETCH_TASK = 'background-fetch-task';
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async () => {
+    const adhanPreferences = await AsyncStorage.getItem('adhanPreferences');
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      priority: Notifications.AndroidImportance.MAX,
+    };
+  },
 });
 
 function DuasStackScreen({ themeColors, language }) {
@@ -239,6 +245,92 @@ const registerForPushNotificationsAsync = async () => {
   if (finalStatus !== 'granted') {
     alert('Failed to get push token for push notification!');
     return;
+  }
+};
+
+TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => {
+  if (error) return;
+
+  const { prayer, adhanPreference } = data;
+  if (!adhanPreference || adhanPreference === 'None') return;
+
+  try {
+    // For silent notifications, just show the notification without sound
+    if (adhanPreference === 'Silent') {
+      return;
+    }
+
+    // For default notification sound, the system will handle it
+    if (adhanPreference === 'Default notification sound') {
+      return;
+    }
+
+    // For custom adhans, play the sound in background
+    let soundFile;
+    switch (adhanPreference) {
+      case 'Adhan (Nureyn Mohammad)':
+        soundFile = require('./assets/adhan.mp3');
+        break;
+      case 'Adhan (Madina)':
+        soundFile = require('./assets/madinah_adhan.mp3');
+        break;
+      case 'Adhan (Makka)':
+        soundFile = require('./assets/makkah_adhan.mp3');
+        break;
+      case 'Long beep':
+        soundFile = require('./assets/long_beep.mp3');
+        break;
+      default:
+        return;
+    }
+
+    const { sound } = await Audio.Sound.createAsync(soundFile, {
+      shouldPlay: true,
+      isLooping: false,
+      volume: 1.0,
+      staysActiveInBackground: true,
+    });
+
+    // Keep track of the sound object globally
+    global.currentAdhanSound = sound;
+
+    // Clean up after playback
+    sound.setOnPlaybackStatusUpdate(async (status) => {
+      if (status.didJustFinish) {
+        await sound.unloadAsync();
+        delete global.currentAdhanSound;
+      }
+    });
+  } catch (error) {
+    console.error("Error playing adhan:", error);
+  }
+});
+
+// Configure audio for background playback
+Audio.setAudioModeAsync({
+  staysActiveInBackground: true,
+  shouldDuckAndroid: true,
+  playThroughEarpieceAndroid: false,
+  allowsRecordingIOS: false,
+  playsInSilentModeIOS: true,
+});
+
+const setupNotificationChannels = async () => {
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('prayer-times', {
+      name: 'Prayer Times',
+      importance: Notifications.AndroidImportance.MAX,
+      enableVibrate: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      bypassDnd: true,
+    });
+
+    await Notifications.setNotificationChannelAsync('prayer-reminders', {
+      name: 'Prayer Reminders',
+      importance: Notifications.AndroidImportance.HIGH,
+      enableVibrate: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    });
   }
 };
 

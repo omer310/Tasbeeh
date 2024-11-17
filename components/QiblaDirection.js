@@ -84,6 +84,18 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
     gettingClose: {
       en: 'Getting Close...',
       ar: 'تقترب...'
+    },
+    turnToYourLeft: {
+      en: 'Turn to your left',
+      ar: 'انعطف إلى يسارك'
+    },
+    turnToYourRight: {
+      en: 'Turn to your right',
+      ar: 'انعطف إلى يمينك'
+    },
+    youAreFacingMakkah: {
+      en: "You're facing Makkah",
+      ar: 'أنت تواجه مكة'
     }
   };
 
@@ -270,26 +282,16 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
         </Animated.View>
 
         <View style={styles.centerTextContainer}>
-          <Text style={[styles.degrees, { color: themeColors.textColor }]}>
-            {qiblaDirection ? `${qiblaDirection.toFixed(2)}°` : '--°'}
-          </Text>
-          <View style={styles.accuracyIndicator}>
-            <Text style={[styles.accuracyText, { color: themeColors.textColor }]}>
-              {`${getTranslatedText('accuracy')}: ${
-                headingAccuracy ? `${headingAccuracy.toFixed(1)}°` : '--°'
-              }`}
-            </Text>
-            {headingAccuracy > 15 && (
-              <TouchableOpacity 
-                style={[styles.calibrateButton, { backgroundColor: themeColors.primaryColor }]}
-                onPress={showCalibrationAlert}
-              >
-                <Text style={styles.calibrateText}>
-                  {getTranslatedText('tapToCalibrate')}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {headingAccuracy > 15 && (
+            <TouchableOpacity 
+              style={[styles.calibrateButton, { backgroundColor: themeColors.primaryColor }]}
+              onPress={showCalibrationAlert}
+            >
+              <Text style={styles.calibrateText}>
+                {getTranslatedText('tapToCalibrate')}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={[styles.northIndicator, { top: -55 }]}>
@@ -308,53 +310,30 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
     const getIndicatorContent = () => {
       if (isQiblaAligned) {
         return {
-          icon: 'checkbox-marked-circle-outline',
-          text: getTranslatedText('aligned'),
-          color: '#10b981',
-          bgColor: 'rgba(16, 185, 129, 0.15)'
-        };
-      } else if (Math.abs(angleDifference) < NEAR_ALIGNMENT_THRESHOLD) {
-        return {
-          icon: 'target',
-          text: getTranslatedText('gettingClose'),
-          color: '#34d399',
-          bgColor: 'rgba(52, 211, 153, 0.15)'
-        };
-      } else {
-        const isRight = angleDifference > 0;
-        return {
-          icon: isRight ? 'rotate-right' : 'rotate-left',
-          text: getTranslatedText(isRight ? 'turnRight' : 'turnLeft'),
-          color: themeColors.primaryColor,
-          bgColor: `${themeColors.primaryColor}15`
+          prefix: getTranslatedText('youAreFacingMakkah'),
+          highlight: '',
+          color: '#059669' // Green color for the highlight
         };
       }
+      
+      const isRight = angleDifference > 0;
+      return {
+        prefix: isRight ? getTranslatedText('turnToYourRight') : getTranslatedText('turnToYourLeft'),
+        highlight: '',
+        color: '#059669' // Green color for the highlight
+      };
     };
 
     const content = getIndicatorContent();
 
     return (
       <View style={styles.directionContainer}>
-        <Animated.View style={[
-          styles.modernIndicatorContent,
-          {
-            backgroundColor: content.bgColor,
-            borderColor: content.color,
-            transform: [{ scale: isQiblaAligned ? 1.05 : 1 }]
-          }
-        ]}>
-          <MaterialCommunityIcons 
-            name={content.icon} 
-            size={24} 
-            color={content.color}
-          />
-          <Text style={[
-            styles.modernDirectionText,
-            { color: content.color }
-          ]}>
-            {content.text}
+        <Text style={styles.directionText}>
+          <Text style={[styles.prefixText, { color: content.color }]}>{content.prefix}</Text>
+          <Text style={[styles.highlightText, { color: content.color }]}>
+            {content.highlight}
           </Text>
-        </Animated.View>
+        </Text>
       </View>
     );
   };
@@ -536,20 +515,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  degrees: {
-    fontSize: 38,
-    fontWeight: '700',
-    marginBottom: 4,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-light',
-    textAlign: 'center',
-  },
-  accuracyText: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginBottom: 4,
-    opacity: 0.9,
-    textAlign: 'center',
-  },
   error: {
     fontSize: 18,
     color: 'red',
@@ -588,135 +553,29 @@ const styles = StyleSheet.create({
   directionContainer: {
     position: 'absolute',
     bottom: '15%',
-    left: 20,
-    right: 20,
-    alignItems: 'center',
-    zIndex: 3,
-  },
-  
-  directionIndicator: {
-    width: '100%',
-    maxWidth: 300,
-    backgroundColor: 'rgba(255, 255, 255, 0.98)', // More opaque
-    borderRadius: 20,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2, // Increased shadow opacity
-    shadowRadius: 12,
-    elevation: 8, // Increased elevation for Android
-    alignSelf: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.1)', // Added subtle border
-  },
-
-  indicatorContent: {
-    flexDirection: 'row',
+    left: 0,
+    right: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
-    paddingHorizontal: 8,
   },
 
   directionText: {
-    fontSize: 28, // Slightly larger
-    fontWeight: '700',
-    marginLeft: 12,
-    flex: 1,
-  },
-
-  progressBar: {
-    height: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.08)',
-    borderRadius: 2,
-    overflow: 'hidden',
-    marginTop: 8,
-  },
-
-  progressFill: {
-    height: '100%',
-    borderRadius: 1.5,
-  },
-
-  alignedIndicator: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    borderWidth: 1,
-    borderColor: '#10b981',
-  },
-
-  alignedText: {
-    color: '#10b981',
+    fontSize: 28,
+    textAlign: 'center',
     fontWeight: '700',
   },
 
-  alignedProgress: {
-    backgroundColor: '#10b981',
+  prefixText: {
+    color: '#064e3b', // Dark green for regular text
+    fontWeight: '700',
   },
 
-  nearlyAlignedIndicator: {
-    backgroundColor: 'rgba(16, 185, 129, 0.05)',
-  },
-
-  nearlyAlignedText: {
-    color: '#10b981',
-  },
-
-  nearlyAlignedProgress: {
-    backgroundColor: '#10b981',
-  },
-
-  compassTintOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 999,
-    opacity: 0.3,
-    zIndex: 1,
-  },
-
-  modernDirectionIndicator: {
-    position: 'absolute',
-    bottom: '30%',
-    left: '50%',
-    transform: [{ translateX: -75 }], // Half of the width
-    width: 150,
-    alignItems: 'center',
-    zIndex: 3,
-  },
-
-  modernIndicatorContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    gap: 8,
-  },
-
-  modernDirectionText: {
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-
-  modernAlignedIndicator: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-  },
-
-  modernNearlyAlignedIndicator: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+  highlightText: {
+    fontWeight: '700',
+    color: '#059669',
+    textShadowColor: 'rgba(5, 150, 105, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 
   centerTextContainer: {

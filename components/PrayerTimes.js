@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground, Image, Switch, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground, Image, Switch, ActivityIndicator, Dimensions, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import * as Location from 'expo-location';
@@ -9,6 +9,7 @@ import { Audio } from 'expo-av';
 import PrayerTimeSettings from './PrayerTimeSettings';
 import AdhanPreferenceModal from './AdhanPreferencesModal';
 import { format } from 'date-fns';
+import { BACKGROUND_NOTIFICATION_TASK } from '../constants/NotificationConstants';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -42,6 +43,7 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [adhanModalVisible, setAdhanModalVisible] = useState(false);
   const [selectedPrayer, setSelectedPrayer] = useState(null);
+  const [dimensions, setDimensions] = useState(Dimensions.get('window'));
 
   // Add translations
   const translations = {
@@ -58,19 +60,54 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     imsak: { en: 'Imsak', ar: 'الإمساك' },
     next: { en: 'Next', ar: 'التالي' },
     playAdhan: { en: 'Play Adhan', ar: 'تشغيل الأذان' },
+    midnight: { en: 'Midnight', ar: 'منتصف الليل' },
+    lastTime: { en: 'Last time', ar: 'آخر وقت' },
+    lastTimeIsha: { en: 'Last time to pray Isha ends in', ar: 'آخر وقت لصلاة العشاء ينتهي في' },
+    fajrEnds: { en: 'Fajr ends in', ar: 'ينتهي وقت الفجر في' },
+    am: { en: 'AM', ar: 'ص' },
+    pm: { en: 'PM', ar: 'م' },
   };
+
+  const arabicFontFamily = Platform.OS === 'ios' ? 'Arial' : 'Scheherazade';
 
   const getTranslatedText = (key) => {
     return translations[key][language] || key;
   };
 
+  // Add this helper function after the translations object
+  const convertToArabicNumbers = (str) => {
+    if (!str) return str;
+    const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    return str.toString().replace(/[0-9]/g, (w) => arabicNumbers[w]);
+  };
+
   useEffect(() => {
     const setup = async () => {
-      await loadSettings();
-      await loadAdhanPreferences();
-      await registerForPushNotificationsAsync();
-      await loadCachedPrayerTimes();
+      try {
+        // Request notifications permission
+        const { status } = await Notifications.requestPermissionsAsync({
+          ios: {
+            allowAlert: true,
+            allowBadge: true,
+            allowSound: true,
+            allowAnnouncements: true,
+          },
+        });
+
+        if (status !== 'granted') {
+          console.log('Notification permissions not granted');
+          return;
+        }
+
+        await loadSettings();
+        await loadAdhanPreferences();
+        await loadCachedPrayerTimes();
+        await schedulePrayerNotifications();
+      } catch (error) {
+        console.error('Error in setup:', error);
+      }
     };
+
     setup();
   }, []);
 
@@ -82,6 +119,14 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
       return () => clearInterval(timer);
     }
   }, [prayerTimesRef.current]); // Add prayerTimesRef.current as a dependency
+
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setDimensions(window);
+    });
+
+    return () => subscription?.remove();
+  }, []);
 
   const loadSettings = async () => {
     try {
@@ -177,13 +222,13 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     const next = getNextPrayer(prayerTimesRef.current);
     setNextPrayer(next);
     const countdownTime = getCountdown(next, prayerTimesRef.current);
-    setCountdown(countdownTime);
+    setCountdown(language === 'ar' ? convertToArabicNumbers(countdownTime) : countdownTime);
   };
 
   const getNextPrayer = (times) => {
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
-    const prayers = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+    const prayers = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha', 'Midnight'];
     
     for (let prayer of prayers) {
       const [hours, minutes] = times[prayer].split(':').map(Number);
@@ -207,7 +252,8 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     const diffMinutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     const diffSeconds = Math.floor((diff % (1000 * 60)) / 1000);
 
-    return `${diffHours.toString().padStart(2, '0')}:${diffMinutes.toString().padStart(2, '0')}:${diffSeconds.toString().padStart(2, '0')}`;
+    const timeString = `${diffHours.toString().padStart(2, '0')}:${diffMinutes.toString().padStart(2, '0')}:${diffSeconds.toString().padStart(2, '0')}`;
+    return timeString;
   };
 
   const handleSettingsChange = (newSettings) => {
@@ -224,13 +270,14 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     
     const convertTo12Hour = (time) => {
       const [hours, minutes] = time.split(':').map(Number);
-      const period = hours >= 12 ? 'PM' : 'AM';
+      const period = hours >= 12 ? getTranslatedText('pm') : getTranslatedText('am');
       const adjustedHours = hours % 12 || 12;
-      return `${adjustedHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+      const timeString = `${adjustedHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+      return language === 'ar' ? convertToArabicNumbers(timeString) : timeString;
     };
 
-    // Calculate last time for Isha (midnight)
-    const getLastIshaTime = () => {
+    // Calculate midnight time
+    const getMidnightTime = () => {
       if (prayerTimesRef.current['Midnight']) {
         return prayerTimesRef.current['Midnight'];
       }
@@ -271,7 +318,7 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
             <Text style={[
               styles.prayerName, 
               isDarkMode && styles.prayerNameDark,
-              isArabic && styles.arabicText
+              isArabic && styles.arabicPrayerName
             ]}>
               {getTranslatedText(prayer.toLowerCase())}
             </Text>
@@ -284,13 +331,22 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
                 {getTranslatedText('sunrise')} {convertTo12Hour(prayerTimesRef.current['Sunrise'])}
               </Text>
             )}
+            {prayer === 'Isha' && getMidnightTime() && (
+              <Text style={[
+                styles.sunriseTime, 
+                { color: isDarkMode ? themeColors.darkSecondaryTextColor : themeColors.secondaryTextColor },
+                isArabic && styles.arabicText
+              ]}>
+                {getTranslatedText('midnight')} {convertTo12Hour(getMidnightTime())}
+              </Text>
+            )}
           </View>
         </View>
         <View style={[styles.prayerTimeContainer, isArabic && styles.prayerTimeContainerRTL]}>
           <Text style={[
             styles.prayerTime, 
             isDarkMode && { color: '#6ECF76' },
-            isArabic && styles.arabicText
+            isArabic && styles.arabicPrayerTime
           ]}>
             {convertTo12Hour(prayerTimesRef.current[prayer])}
           </Text>
@@ -333,58 +389,79 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
   };
 
   const schedulePrayerNotifications = async () => {
-    // Retrieve existing scheduled notification IDs
-    let existingNotificationIds = await AsyncStorage.getItem('scheduledNotificationIds');
-    if (existingNotificationIds) {
-      existingNotificationIds = JSON.parse(existingNotificationIds);
-      // Cancel existing scheduled notifications
-      for (let id of existingNotificationIds) {
-        await Notifications.cancelScheduledNotificationAsync(id);
+    try {
+      // Cancel existing notifications
+      let existingNotificationIds = await AsyncStorage.getItem('scheduledNotificationIds');
+      if (existingNotificationIds) {
+        existingNotificationIds = JSON.parse(existingNotificationIds);
+        for (let id of existingNotificationIds) {
+          await Notifications.cancelScheduledNotificationAsync(id);
+        }
       }
-    } else {
-      existingNotificationIds = [];
-    }
 
-    const prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
-    const now = new Date();
-    const newNotificationIds = [];
+      const prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+      const now = new Date();
+      const newNotificationIds = [];
 
-    for (let prayer of prayers) {
-      const [hours, minutes] = prayerTimesRef.current[prayer].split(':').map(Number);
-      let prayerDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0);
-      
-      if (prayerDate > now) {
+      // Register background task if not already registered
+      await Notifications.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK);
+
+      for (let prayer of prayers) {
+        const [hours, minutes] = prayerTimesRef.current[prayer].split(':').map(Number);
+        let prayerDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
+        
+        // If prayer time has passed, schedule for next day
+        if (prayerDate <= now) {
+          prayerDate.setDate(prayerDate.getDate() + 1);
+        }
+
         const adhanPreference = adhanPreferences[prayer];
         if (!playAdhan || adhanPreference === 'None') {
-          continue; // Skip this prayer notification
+          continue;
         }
-        let notificationContent = {
-          title: `Time for ${prayer} Prayer`,
-          body: `It's time to pray ${prayer}. The prayer time is ${prayerTimesRef.current[prayer]}.`,
-          data: { prayer, adhanPreference },
-        };
 
-        if (adhanPreference === 'Silent') {
-          notificationContent.sound = null;
-        } else if (adhanPreference === 'Default notification sound') {
-          // Use default notification sound
-        } else {
-          // For custom adhan sounds, we'll use a custom sound
-          notificationContent.sound = null; // We'll play the sound manually
-        }
-        
+        // Schedule the notification
         const notificationId = await Notifications.scheduleNotificationAsync({
-          content: notificationContent,
+          content: {
+            title: `Time for ${prayer} Prayer`,
+            body: `It's time to pray ${prayer}`,
+            data: { prayer, adhanPreference },
+            sound: adhanPreference === 'Silent' ? null : 'default',
+            // Add priority for Android
+            priority: Notifications.AndroidNotificationPriority.MAX,
+          },
           trigger: {
             date: prayerDate,
+            // Enable precise timing for Android
+            channelId: 'prayer-times',
           },
         });
+        
         newNotificationIds.push(notificationId);
       }
+
+      // Save new notification IDs
+      await AsyncStorage.setItem('scheduledNotificationIds', JSON.stringify(newNotificationIds));
+    } catch (error) {
+      console.error('Error scheduling notifications:', error);
     }
-    // Save new scheduled notification IDs
-    await AsyncStorage.setItem('scheduledNotificationIds', JSON.stringify(newNotificationIds));
   };
+
+  // Add this useEffect to create notification channel for Android
+  useEffect(() => {
+    const createNotificationChannel = async () => {
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('prayer-times', {
+          name: 'Prayer Times',
+          importance: Notifications.AndroidImportance.MAX,
+          enableVibrate: true,
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        });
+      }
+    };
+
+    createNotificationChannel();
+  }, []);
 
   const playAdhanSound = async (adhanPreference) => {
     let soundFile;
@@ -456,6 +533,98 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     scheduleAdhanNotification(prayer, adhanType);
   };
 
+  const scheduleAdhanNotification = async (prayer, adhanType) => {
+    try {
+      const [hours, minutes] = prayerTimesRef.current[prayer].split(':').map(Number);
+      let prayerDate = new Date();
+      prayerDate.setHours(hours, minutes, 0, 0);
+      
+      // If prayer time has passed, schedule for next day
+      if (prayerDate <= new Date()) {
+        prayerDate.setDate(prayerDate.getDate() + 1);
+      }
+
+      // Cancel any existing notification for this prayer
+      const existingIds = await AsyncStorage.getItem(`notification_${prayer}`);
+      if (existingIds) {
+        const ids = JSON.parse(existingIds);
+        for (const id of ids) {
+          await Notifications.cancelScheduledNotificationAsync(id);
+        }
+      }
+
+      // Don't schedule if None is selected
+      if (adhanType === 'None') {
+        return;
+      }
+
+      const notificationContent = {
+        title: `Time for ${prayer} Prayer`,
+        body: `It's time to pray ${prayer} (${prayerTimesRef.current[prayer]})`,
+        data: { prayer, adhanPreference: adhanType },
+        priority: Notifications.AndroidImportance.MAX,
+      };
+
+      // Handle different notification types
+      if (adhanType === 'Silent') {
+        notificationContent.sound = false;
+      } else if (adhanType === 'Default notification sound') {
+        notificationContent.sound = true;
+      } else {
+        // For custom adhans, we'll handle the sound in the background task
+        notificationContent.sound = false;
+      }
+
+      const notificationId = await Notifications.scheduleNotificationAsync({
+        content: notificationContent,
+        trigger: {
+          date: prayerDate,
+          channelId: 'prayer-times'
+        }
+      });
+
+      // Store the notification ID
+      await AsyncStorage.setItem(`notification_${prayer}`, JSON.stringify([notificationId]));
+    } catch (error) {
+      console.error('Error scheduling notification:', error);
+    }
+  };
+
+  const scheduleReminderNotification = async (prayer, reminderMinutes) => {
+    if (reminderMinutes <= 0) return;
+
+    try {
+      const [hours, minutes] = prayerTimesRef.current[prayer].split(':').map(Number);
+      let reminderDate = new Date();
+      reminderDate.setHours(hours, minutes, 0, 0);
+      reminderDate.setMinutes(reminderDate.getMinutes() - reminderMinutes);
+
+      if (reminderDate <= new Date()) {
+        reminderDate.setDate(reminderDate.getDate() + 1);
+      }
+
+      const notificationId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `${prayer} Prayer Reminder`,
+          body: `${prayer} prayer will be in ${reminderMinutes} minutes`,
+          sound: true,
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+        },
+        trigger: {
+          date: reminderDate,
+          channelId: 'prayer-reminders'
+        }
+      });
+
+      const storedIds = await AsyncStorage.getItem('scheduledReminderIds') || '[]';
+      const reminderIds = JSON.parse(storedIds);
+      reminderIds.push(notificationId);
+      await AsyncStorage.setItem('scheduledReminderIds', JSON.stringify(reminderIds));
+    } catch (error) {
+      console.error('Error scheduling reminder notification:', error);
+    }
+  };
+
   return (
     <ImageBackground 
       source={require('../assets/islamic-pattern2.png')}
@@ -479,29 +648,53 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
         ) : prayerTimesRef.current ? (
           <>
             <View style={styles.header}>
-              <Text style={[styles.title, { color: isDarkMode ? themeColors.darkTextColor : themeColors.textColor }]}>
+              <Text style={[
+                styles.title,
+                { color: isDarkMode ? themeColors.darkTextColor : themeColors.textColor },
+                language === 'ar' && styles.arabicTitle
+              ]}>
                 {getTranslatedText('prayerTimes')}
               </Text>
               <TouchableOpacity onPress={() => setSettingsModalVisible(true)} style={styles.locationContainer}>
                 <Ionicons name="location-outline" size={16} color={isDarkMode ? themeColors.darkSecondaryTextColor : themeColors.secondaryTextColor} />
-                <Text style={[styles.subtitle, { color: isDarkMode ? themeColors.darkSecondaryTextColor : themeColors.secondaryTextColor }]}>
+                <Text style={[
+                  styles.subtitle,
+                  { color: isDarkMode ? themeColors.darkSecondaryTextColor : themeColors.secondaryTextColor },
+                  language === 'ar' && styles.arabicSubtitle
+                ]}>
                   {settings.location}
                 </Text>
               </TouchableOpacity>
               <Text style={[styles.date, { color: isDarkMode ? themeColors.darkTextColor : themeColors.textColor }]}>
-                {new Date().toLocaleDateString(language === 'ar' ? 'ar-SA' : 'en-US', { 
+                {new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', { 
                   weekday: 'long',
                   day: 'numeric', 
                   month: 'long' 
                 })}
               </Text>
               {nextPrayer && (
-                <Text style={[styles.countdown, { color: isDarkMode ? '#6ECF76' : themeColors.activeTabColor }]}>
-                  {getTranslatedText('nextPrayer')}: {getTranslatedText(nextPrayer.toLowerCase())} {getTranslatedText('in')} {countdown}
+                <Text style={[
+                  styles.countdown,
+                  { color: isDarkMode ? '#6ECF76' : themeColors.activeTabColor },
+                  language === 'ar' && styles.arabicCountdown
+                ]}>
+                  {nextPrayer === 'Midnight' 
+                    ? `${getTranslatedText('lastTimeIsha')} ${countdown}`
+                    : nextPrayer === 'Sunrise'
+                      ? `${getTranslatedText('fajrEnds')} ${countdown}`
+                      : `${getTranslatedText('nextPrayer')}: ${getTranslatedText(nextPrayer.toLowerCase())} ${getTranslatedText('in')} ${countdown}`
+                  }
                 </Text>
               )}
             </View>
-            <ScrollView style={styles.scrollView}>
+            <ScrollView 
+              style={styles.scrollView}
+              contentContainerStyle={{ 
+                flexGrow: 1,
+                justifyContent: 'center'
+              }}
+              showsVerticalScrollIndicator={false}
+            >
               {['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'].map(renderPrayerTime)}
               {settings.showImsak && renderPrayerTime('Imsak')}
             </ScrollView>
@@ -545,18 +738,21 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 20,
+    paddingHorizontal: '5%',
+    paddingVertical: '2%',
+    justifyContent: 'center',
   },
   header: {
     alignItems: 'center',
-    padding: 50,
-    marginBottom: -30,
+    paddingVertical: '4%',
+    marginBottom: '2%',
+    width: '100%',
   },
   title: {
-    fontSize: 28,
+    fontSize: Math.min(28, Math.round(Dimensions.get('window').width * 0.07)),
     fontWeight: 'bold',
     textAlign: 'center',
-    color: 'black', 
+    color: 'black',
   },
   titleDark: {
     color: 'white',
@@ -564,34 +760,48 @@ const styles = StyleSheet.create({
   locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 5,
+    marginTop: '2%',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: Math.min(16, Math.round(Dimensions.get('window').width * 0.04)),
     marginLeft: 5,
   },
   date: {
-    fontSize: 18,
+    fontSize: Math.min(18, Math.round(Dimensions.get('window').width * 0.045)),
     fontWeight: 'bold',
-    marginTop: 10,
+    marginTop: '2%',
+    textAlign: 'center',
+  },
+  countdown: {
+    fontSize: Math.min(16, Math.round(Dimensions.get('window').width * 0.04)),
+    fontWeight: 'bold',
+    marginTop: '2%',
+    textAlign: 'center',
+    paddingHorizontal: '5%',
   },
   scrollView: {
-    flex: 1,
+    width: '100%',
+    maxHeight: Math.round(Dimensions.get('window').height * 0.65),
   },
   prayerItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
-    marginBottom: 10,
+    padding: '3%',
+    marginBottom: '2%',
     borderRadius: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    minHeight: Math.round(Dimensions.get('window').height * 0.075),
+  },
+  nextPrayer: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)', // Green highlight for next prayer
+    borderWidth: 1,
+    borderColor: '#4CAF50',
   },
   prayerItemDark: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  nextPrayer: {
-    backgroundColor: 'rgba(76, 175, 80, 0.2)',
   },
   leftContent: {
     flexDirection: 'row',
@@ -599,17 +809,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconContainer: {
-    width: 50,
-    height: 50,
-    marginRight: 15,
+    width: Math.round(Dimensions.get('window').width * 0.12),
+    height: Math.round(Dimensions.get('window').width * 0.12),
+    marginRight: '4%',
     justifyContent: 'center',
     alignItems: 'center',
   },
   icon: {
     width: '100%',
     height: '100%',
-    maxWidth: 60,
-    maxHeight: 60,
+    maxWidth: Math.round(Dimensions.get('window').width * 0.08),
+    maxHeight: Math.round(Dimensions.get('window').width * 0.08),
   },
   asrIcon: {
     maxWidth: 34,
@@ -621,7 +831,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   prayerName: {
-    fontSize: 18,
+    fontSize: Math.min(18, Math.round(Dimensions.get('window').width * 0.045)),
     fontWeight: 'bold',
     color: 'black',
   },
@@ -629,65 +839,49 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   sunriseTime: {
-    fontSize: 14,
+    fontSize: Math.min(14, Math.round(Dimensions.get('window').width * 0.035)),
   },
   prayerTimeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    minWidth: 80,
+    minWidth: Math.round(Dimensions.get('window').width * 0.2),
     justifyContent: 'flex-end',
   },
   prayerTime: {
-    fontSize: 18,
+    fontSize: Math.min(18, Math.round(Dimensions.get('window').width * 0.045)),
     fontWeight: 'bold',
-    marginRight: 10,
+    marginRight: '3%',
     color: '#4CAF50',
-  },
-  countdown: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 10,
   },
   nextIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   nextText: {
-    fontSize: 12,
+    fontSize: Math.min(12, Math.round(Dimensions.get('window').width * 0.03)),
     fontWeight: 'bold',
     marginLeft: 5,
     color: '#4CAF50',
-  },
-  settingContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 15,
-    marginBottom: 10,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  settingContainerDark: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: '5%',
   },
   errorText: {
-    fontSize: 16,
+    fontSize: Math.min(16, Math.round(Dimensions.get('window').width * 0.04)),
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: '5%',
   },
   retryButton: {
-    padding: 10,
+    padding: '3%',
     borderRadius: 5,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   retryButtonText: {
-    fontSize: 16,
+    fontSize: Math.min(16, Math.round(Dimensions.get('window').width * 0.04)),
     fontWeight: 'bold',
   },
   prayerItemRTL: {
@@ -698,7 +892,7 @@ const styles = StyleSheet.create({
   },
   prayerInfoRTL: {
     alignItems: 'flex-end',
-    marginRight: 15,
+    marginRight: '4%',
     marginLeft: 0,
   },
   prayerTimeContainerRTL: {
@@ -707,14 +901,43 @@ const styles = StyleSheet.create({
   },
   nextIndicatorRTL: {
     flexDirection: 'row-reverse',
-    marginRight: 10,
+    marginRight: '3%',
     marginLeft: 0,
   },
   arabicText: {
-    fontFamily: 'System', // Consider using an Arabic-specific font
+    fontFamily: 'Scheherazade',
     textAlign: 'right',
-    fontSize: 20, // Slightly larger for Arabic text
-    lineHeight: 28,
+    fontSize: Math.min(20, Math.round(Dimensions.get('window').width * 0.05)),
+    lineHeight: Math.min(28, Math.round(Dimensions.get('window').width * 0.07)),
+  },
+  arabicTitle: {
+    fontFamily: 'Scheherazade',
+    fontSize: Math.min(28, Math.round(Dimensions.get('window').width * 0.07)),
+    lineHeight: Math.min(34, Math.round(Dimensions.get('window').width * 0.085)),
+    fontWeight: 'bold',
+  },
+  arabicSubtitle: {
+    fontFamily: 'Scheherazade',
+    fontSize: Math.min(16, Math.round(Dimensions.get('window').width * 0.04)),
+    lineHeight: Math.min(22, Math.round(Dimensions.get('window').width * 0.055)),
+  },
+  arabicPrayerName: {
+    fontFamily: 'Scheherazade',
+    fontSize: Math.min(22, Math.round(Dimensions.get('window').width * 0.055)),
+    lineHeight: Math.min(30, Math.round(Dimensions.get('window').width * 0.075)),
+    fontWeight: 'bold',
+  },
+  arabicPrayerTime: {
+    fontFamily: 'Scheherazade',
+    fontSize: Math.min(20, Math.round(Dimensions.get('window').width * 0.05)),
+    lineHeight: Math.min(28, Math.round(Dimensions.get('window').width * 0.07)),
+    fontWeight: 'bold',
+  },
+  arabicCountdown: {
+    fontFamily: 'Scheherazade',
+    fontSize: Math.min(18, Math.round(Dimensions.get('window').width * 0.045)),
+    lineHeight: Math.min(26, Math.round(Dimensions.get('window').width * 0.065)),
+    fontWeight: 'bold',
   },
 });
 

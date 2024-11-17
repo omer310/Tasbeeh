@@ -136,10 +136,14 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPref
     onPreferenceChange(prayer, selectedAdhan, option.name);
   };
 
-  const handleAdhanSelection = (option) => {
+  const handleAdhanSelection = async (option) => {
     setSelectedAdhan(option.name);
-    savePreferences(option.name, null);
-    onPreferenceChange(prayer, option.name, selectedReminder);
+    await savePreferences(option.name, null);
+    
+    // Immediately schedule the notification with new preference
+    if (typeof onPreferenceChange === 'function') {
+      onPreferenceChange(prayer, option.name, selectedReminder);
+    }
   };
 
   const reminderOptions = [
