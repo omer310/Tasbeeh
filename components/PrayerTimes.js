@@ -10,6 +10,7 @@ import PrayerTimeSettings from './PrayerTimeSettings';
 import AdhanPreferenceModal from './AdhanPreferencesModal';
 import { format } from 'date-fns';
 import { BACKGROUND_NOTIFICATION_TASK } from '../constants/NotificationConstants';
+import { LinearGradient } from 'expo-linear-gradient';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -18,6 +19,10 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const ASPECT_RATIO = SCREEN_HEIGHT / SCREEN_WIDTH;
+const isTablet = SCREEN_WIDTH >= 768; // Common tablet breakpoint
 
 const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync, isDarkMode }) => {
   const [isLoading, setIsLoading] = useState(true);
@@ -34,16 +39,17 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
   });
   const [playAdhan, setPlayAdhan] = useState(true);
   const [adhanPreferences, setAdhanPreferences] = useState({
-    Fajr: 'Adhan (Madina)',
-    Dhuhr: 'Adhan (Madina)',
-    Asr: 'Adhan (Madina)',
-    Maghrib: 'Adhan (Madina)',
-    Isha: 'Adhan (Madina)',
+    Fajr: 'Adhan (Nureyn Mohammad)',
+    Dhuhr: 'Adhan (Nureyn Mohammad)',
+    Asr: 'Adhan (Nureyn Mohammad)',
+    Maghrib: 'Adhan (Nureyn Mohammad)',
+    Isha: 'Adhan (Nureyn Mohammad)',
   });
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [adhanModalVisible, setAdhanModalVisible] = useState(false);
   const [selectedPrayer, setSelectedPrayer] = useState(null);
   const [dimensions, setDimensions] = useState(Dimensions.get('window'));
+  const [hijriDate, setHijriDate] = useState(null);
 
   // Add translations
   const translations = {
@@ -66,6 +72,10 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     fajrEnds: { en: 'Fajr ends in', ar: 'ينتهي وقت الفجر في' },
     am: { en: 'AM', ar: 'ص' },
     pm: { en: 'PM', ar: 'م' },
+    hijriDate: { en: 'Hijri Date', ar: 'التاريخ الهجري' },
+    hours: { en: 'Hours', ar: 'ساعات' },
+    minutes: { en: 'Minutes', ar: 'دقائق' },
+    seconds: { en: 'Seconds', ar: 'ثواني' },
   };
 
   const arabicFontFamily = Platform.OS === 'ios' ? 'Arial' : 'Scheherazade';
@@ -80,6 +90,73 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
     return str.toString().replace(/[0-9]/g, (w) => arabicNumbers[w]);
   };
+
+  // Add this function after the translations object
+  const getHijriDate = (date) => {
+    // Using a simple calculation - for more accuracy you might want to use a library like moment-hijri
+    const y = date.getFullYear();
+    const m = date.getMonth() + 1;
+    const d = date.getDate();
+
+    let jd = Math.floor((365.25 * (y + 4716))) + Math.floor((30.6001 * (m + 1))) + d - 1524.5;
+    
+    let l = Math.floor(jd) - 1948440 + 10632;
+    let n = Math.floor((l - 1) / 10631);
+    l = l - 10631 * n + 354;
+    
+    let j = (Math.floor((10985 - l) / 5316)) * (Math.floor((50 * l) / 17719)) + (Math.floor(l / 5670)) * (Math.floor((43 * l) / 15238));
+    l = l - (Math.floor((30 - j) / 15)) * (Math.floor((17719 * j) / 50)) - (Math.floor(j / 16)) * (Math.floor((15238 * j) / 43)) + 29;
+    
+    let month = Math.floor((24 * l) / 709);
+    let day = l - Math.floor((709 * month) / 24);
+    let year = 30 * n + j - 30;
+
+    const hijriMonths = {
+      en: ['Muharram', 'Safar', 'Rabi al-Awwal', 'Rabi al-Thani', 'Jumada al-Awwal', 'Jumada al-Thani', 
+           'Rajab', 'Sha\'ban', 'Ramadan', 'Shawwal', 'Dhu al-Qi\'dah', 'Dhu al-Hijjah'],
+      ar: ['محرم', 'صفر', 'ربيع الأول', 'ربيع الثاني', 'جمادى الأولى', 'جمادى الآخرة',
+           'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة']
+    };
+
+    return {
+      day,
+      month: month - 1,
+      year,
+      monthName: hijriMonths[language][month - 1]
+    };
+  };
+
+  const fetchHijriDate = async () => {
+    try {
+      const today = new Date();
+      const month = today.getMonth() + 1;
+      const year = today.getFullYear();
+      
+      const response = await axios.get(`https://api.aladhan.com/v1/gToHCalendar/${month}/${year}`);
+      
+      if (response.data.code === 200) {
+        const gregorianDate = format(today, 'dd-MM-yyyy');
+        const hijriData = response.data.data.find(
+          item => item.gregorian.date === gregorianDate
+        );
+        
+        if (hijriData) {
+          setHijriDate({
+            day: hijriData.hijri.day,
+            month: language === 'ar' ? hijriData.hijri.month.ar : hijriData.hijri.month.en,
+            year: hijriData.hijri.year,
+            weekday: language === 'ar' ? hijriData.hijri.weekday.ar : hijriData.hijri.weekday.en
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching Hijri date:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchHijriDate();
+  }, [language]);
 
   useEffect(() => {
     const setup = async () => {
@@ -324,45 +401,31 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
             </Text>
             {prayer === 'Fajr' && (
               <Text style={[
-                styles.sunriseTime, 
-                { color: isDarkMode ? themeColors.darkSecondaryTextColor : themeColors.secondaryTextColor },
-                isArabic && styles.arabicText
+                styles.additionalTime,
+                isDarkMode && styles.additionalTimeDark,
+                isArabic && styles.arabicAdditionalTime
               ]}>
                 {getTranslatedText('sunrise')} {convertTo12Hour(prayerTimesRef.current['Sunrise'])}
               </Text>
             )}
             {prayer === 'Isha' && getMidnightTime() && (
               <Text style={[
-                styles.sunriseTime, 
-                { color: isDarkMode ? themeColors.darkSecondaryTextColor : themeColors.secondaryTextColor },
-                isArabic && styles.arabicText
+                styles.additionalTime,
+                isDarkMode && styles.additionalTimeDark,
+                isArabic && styles.arabicAdditionalTime
               ]}>
                 {getTranslatedText('midnight')} {convertTo12Hour(getMidnightTime())}
               </Text>
             )}
           </View>
         </View>
-        <View style={[styles.prayerTimeContainer, isArabic && styles.prayerTimeContainerRTL]}>
-          <Text style={[
-            styles.prayerTime, 
-            isDarkMode && { color: '#6ECF76' },
-            isArabic && styles.arabicPrayerTime
-          ]}>
-            {convertTo12Hour(prayerTimesRef.current[prayer])}
-          </Text>
-          {isNext && (
-            <View style={[styles.nextIndicator, isArabic && styles.nextIndicatorRTL]}>
-              <Ionicons name="time-outline" size={16} color={isDarkMode ? '#6ECF76' : '#4CAF50'} />
-              <Text style={[
-                styles.nextText, 
-                isDarkMode && { color: '#6ECF76' },
-                isArabic && styles.arabicText
-              ]}>
-                {getTranslatedText('next')}
-              </Text>
-            </View>
-          )}
-        </View>
+        <Text style={[
+          styles.prayerTime,
+          isDarkMode && styles.prayerTimeDark,
+          isArabic && styles.arabicPrayerTime
+        ]}>
+          {convertTo12Hour(prayerTimesRef.current[prayer])}
+        </Text>
       </TouchableOpacity>
     );
   };
@@ -424,7 +487,7 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
         const notificationId = await Notifications.scheduleNotificationAsync({
           content: {
             title: `Time for ${prayer} Prayer`,
-            body: `It's time to pray ${prayer}`,
+            body: `It's time to pray ${prayer} (${prayerTimesRef.current[prayer]})`,
             data: { prayer, adhanPreference },
             sound: adhanPreference === 'Silent' ? null : 'default',
             // Add priority for Android
@@ -625,6 +688,30 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     }
   };
 
+  const getPrayerGradient = (prayer, isDarkMode) => {
+    const gradients = {
+      Fajr: isDarkMode 
+        ? ['#1a4731', '#4CAF50'] 
+        : ['#2d8a5c', '#4CAF50'],
+      Dhuhr: isDarkMode 
+        ? ['#1a4731', '#4CAF50'] 
+        : ['#2d8a5c', '#4CAF50'],
+      Asr: isDarkMode 
+        ? ['#1a4731', '#4CAF50'] 
+        : ['#2d8a5c', '#4CAF50'],
+      Maghrib: isDarkMode 
+        ? ['#1a4731', '#4CAF50'] 
+        : ['#2d8a5c', '#4CAF50'],
+      Isha: isDarkMode 
+        ? ['#1a4731', '#4CAF50'] 
+        : ['#2d8a5c', '#4CAF50'],
+      default: isDarkMode 
+        ? ['#1a4731', '#4CAF50'] 
+        : ['#2d8a5c', '#4CAF50'],
+    };
+    return gradients[prayer] || gradients.default;
+  };
+
   return (
     <ImageBackground 
       source={require('../assets/islamic-pattern2.png')}
@@ -648,13 +735,6 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
         ) : prayerTimesRef.current ? (
           <>
             <View style={styles.header}>
-              <Text style={[
-                styles.title,
-                { color: isDarkMode ? themeColors.darkTextColor : themeColors.textColor },
-                language === 'ar' && styles.arabicTitle
-              ]}>
-                {getTranslatedText('prayerTimes')}
-              </Text>
               <TouchableOpacity onPress={() => setSettingsModalVisible(true)} style={styles.locationContainer}>
                 <Ionicons name="location-outline" size={16} color={isDarkMode ? themeColors.darkSecondaryTextColor : themeColors.secondaryTextColor} />
                 <Text style={[
@@ -672,26 +752,74 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
                   month: 'long' 
                 })}
               </Text>
+              <Text style={[
+                styles.hijriDate,
+                { color: isDarkMode ? themeColors.darkTextColor : themeColors.textColor },
+                language === 'ar' && styles.arabicHijriDate
+              ]}>
+                {hijriDate ? (
+                  language === 'ar' 
+                    ? `${convertToArabicNumbers(hijriDate.day)} ${hijriDate.month} ${convertToArabicNumbers(hijriDate.year)}`
+                    : `${hijriDate.day} ${hijriDate.month} ${hijriDate.year}`
+                ) : (
+                  <ActivityIndicator size="small" color={themeColors.activeTabColor} />
+                )}
+              </Text>
               {nextPrayer && (
-                <Text style={[
-                  styles.countdown,
-                  { color: isDarkMode ? '#6ECF76' : themeColors.activeTabColor },
-                  language === 'ar' && styles.arabicCountdown
-                ]}>
-                  {nextPrayer === 'Midnight' 
-                    ? `${getTranslatedText('lastTimeIsha')} ${countdown}`
-                    : nextPrayer === 'Sunrise'
-                      ? `${getTranslatedText('fajrEnds')} ${countdown}`
-                      : `${getTranslatedText('nextPrayer')}: ${getTranslatedText(nextPrayer.toLowerCase())} ${getTranslatedText('in')} ${countdown}`
-                  }
-                </Text>
+                <LinearGradient
+                  colors={getPrayerGradient(nextPrayer, isDarkMode)}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[
+                    styles.countdownContainer,
+                    language === 'ar' && styles.countdownContainerRTL
+                  ]}
+                >
+                  <Text style={[
+                    styles.countdownTitle,
+                    language === 'ar' && styles.countdownTitleRTL
+                  ]}>
+                    {nextPrayer === 'Sunrise' 
+                      ? getTranslatedText('fajrEnds')
+                      : `${getTranslatedText('nextPrayer')}: ${getTranslatedText(nextPrayer.toLowerCase())}`
+                    }
+                  </Text>
+                  
+                  <View style={styles.timeBoxesContainer}>
+                    {countdown.split(':').map((value, index) => (
+                      <React.Fragment key={index}>
+                        <View style={styles.timeBox}>
+                          <View style={styles.timeBoxInner}>
+                            <Text style={styles.timeBoxText}>
+                              {language === 'ar' ? convertToArabicNumbers(value) : value}
+                            </Text>
+                          </View>
+                          <Text style={[
+                            styles.timeBoxLabel,
+                            language === 'ar' && styles.timeBoxLabelRTL
+                          ]}>
+                            {getTranslatedText(
+                              index === 0 ? 'hours' : 
+                              index === 1 ? 'minutes' : 
+                              'seconds'
+                            )}
+                          </Text>
+                        </View>
+                        {index < 2 && (
+                          <Text style={styles.timeBoxSeparator}>:</Text>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </View>
+                </LinearGradient>
               )}
             </View>
             <ScrollView 
               style={styles.scrollView}
               contentContainerStyle={{ 
                 flexGrow: 1,
-                justifyContent: 'center'
+                justifyContent: 'center',
+                paddingBottom: SCREEN_HEIGHT < 700 ? 60 : 20,
               }}
               showsVerticalScrollIndicator={false}
             >
@@ -744,15 +872,16 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    paddingVertical: '4%',
-    marginBottom: '2%',
+    paddingVertical: SCREEN_HEIGHT < 700 ? '1%' : (ASPECT_RATIO > 1.6 ? '4%' : '2%'),
+    marginTop: SCREEN_HEIGHT < 700 ? '1%' : (isTablet ? '1%' : '2%'),
     width: '100%',
   },
   title: {
-    fontSize: Math.min(28, Math.round(Dimensions.get('window').width * 0.07)),
+    fontSize: isTablet 
+      ? Math.min(36, SCREEN_WIDTH * 0.05)
+      : Math.min(30, SCREEN_WIDTH * 0.075),
     fontWeight: 'bold',
     textAlign: 'center',
-    color: 'black',
   },
   titleDark: {
     color: 'white',
@@ -765,35 +894,47 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   subtitle: {
-    fontSize: Math.min(16, Math.round(Dimensions.get('window').width * 0.04)),
+    fontSize: isTablet 
+      ? Math.min(24, SCREEN_WIDTH * 0.035)
+      : Math.min(20, SCREEN_WIDTH * 0.05),
     marginLeft: 5,
   },
   date: {
-    fontSize: Math.min(18, Math.round(Dimensions.get('window').width * 0.045)),
+    fontSize: isTablet 
+      ? Math.min(22, SCREEN_WIDTH * 0.04)
+      : Math.min(18, SCREEN_WIDTH * 0.055),
     fontWeight: 'bold',
-    marginTop: '2%',
+    marginTop: isTablet ? '1%' : '2%',
     textAlign: 'center',
   },
   countdown: {
-    fontSize: Math.min(16, Math.round(Dimensions.get('window').width * 0.04)),
+    fontSize: Math.min(18, Math.round(Dimensions.get('window').width * 0.055)),
     fontWeight: 'bold',
     marginTop: '2%',
     textAlign: 'center',
-    paddingHorizontal: '5%',
+    paddingHorizontal: '10%',
+    top: 20,
   },
   scrollView: {
     width: '100%',
-    maxHeight: Math.round(Dimensions.get('window').height * 0.65),
+    maxHeight: SCREEN_HEIGHT < 700 
+      ? SCREEN_HEIGHT * 0.45 
+      : (ASPECT_RATIO > 1.6 
+        ? SCREEN_HEIGHT * 0.65 
+        : SCREEN_HEIGHT * 0.55),
+    marginTop: SCREEN_HEIGHT < 700 ? 40 : 20,
   },
   prayerItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '3%',
-    marginBottom: '2%',
+    padding: isTablet ? '2%' : '3%',
+    marginBottom: isTablet ? '1%' : '2%',
     borderRadius: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    minHeight: Math.round(Dimensions.get('window').height * 0.075),
+    minHeight: isTablet 
+      ? SCREEN_HEIGHT * 0.06 
+      : SCREEN_HEIGHT * 0.075,
   },
   nextPrayer: {
     backgroundColor: 'rgba(76, 175, 80, 0.2)', // Green highlight for next prayer
@@ -831,7 +972,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   prayerName: {
-    fontSize: Math.min(18, Math.round(Dimensions.get('window').width * 0.045)),
+    fontSize: Math.min(20, Math.round(Dimensions.get('window').width * 0.055)),
     fontWeight: 'bold',
     color: 'black',
   },
@@ -839,29 +980,7 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   sunriseTime: {
-    fontSize: Math.min(14, Math.round(Dimensions.get('window').width * 0.035)),
-  },
-  prayerTimeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minWidth: Math.round(Dimensions.get('window').width * 0.2),
-    justifyContent: 'flex-end',
-  },
-  prayerTime: {
-    fontSize: Math.min(18, Math.round(Dimensions.get('window').width * 0.045)),
-    fontWeight: 'bold',
-    marginRight: '3%',
-    color: '#4CAF50',
-  },
-  nextIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  nextText: {
-    fontSize: Math.min(12, Math.round(Dimensions.get('window').width * 0.03)),
-    fontWeight: 'bold',
-    marginLeft: 5,
-    color: '#4CAF50',
+    fontSize: Math.min(16, Math.round(Dimensions.get('window').width * 0.045)),
   },
   errorContainer: {
     flex: 1,
@@ -895,36 +1014,27 @@ const styles = StyleSheet.create({
     marginRight: '4%',
     marginLeft: 0,
   },
-  prayerTimeContainerRTL: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'flex-start',
-  },
-  nextIndicatorRTL: {
-    flexDirection: 'row-reverse',
-    marginRight: '3%',
-    marginLeft: 0,
-  },
   arabicText: {
     fontFamily: 'Scheherazade',
     textAlign: 'right',
-    fontSize: Math.min(20, Math.round(Dimensions.get('window').width * 0.05)),
-    lineHeight: Math.min(28, Math.round(Dimensions.get('window').width * 0.07)),
+    fontSize: Math.min(24, Math.round(Dimensions.get('window').width * 0.06)),
+    lineHeight: Math.min(32, Math.round(Dimensions.get('window').width * 0.08)),
   },
   arabicTitle: {
     fontFamily: 'Scheherazade',
-    fontSize: Math.min(28, Math.round(Dimensions.get('window').width * 0.07)),
-    lineHeight: Math.min(34, Math.round(Dimensions.get('window').width * 0.085)),
+    fontSize: Math.min(32, Math.round(Dimensions.get('window').width * 0.08)),
+    lineHeight: Math.min(40, Math.round(Dimensions.get('window').width * 0.095)),
     fontWeight: 'bold',
   },
   arabicSubtitle: {
     fontFamily: 'Scheherazade',
-    fontSize: Math.min(16, Math.round(Dimensions.get('window').width * 0.04)),
-    lineHeight: Math.min(22, Math.round(Dimensions.get('window').width * 0.055)),
+    fontSize: Math.min(22, Math.round(Dimensions.get('window').width * 0.055)),
+    lineHeight: Math.min(28, Math.round(Dimensions.get('window').width * 0.07)),
   },
   arabicPrayerName: {
     fontFamily: 'Scheherazade',
-    fontSize: Math.min(22, Math.round(Dimensions.get('window').width * 0.055)),
-    lineHeight: Math.min(30, Math.round(Dimensions.get('window').width * 0.075)),
+    fontSize: Math.min(26, Math.round(Dimensions.get('window').width * 0.065)),
+    lineHeight: Math.min(34, Math.round(Dimensions.get('window').width * 0.085)),
     fontWeight: 'bold',
   },
   arabicPrayerTime: {
@@ -935,9 +1045,130 @@ const styles = StyleSheet.create({
   },
   arabicCountdown: {
     fontFamily: 'Scheherazade',
-    fontSize: Math.min(18, Math.round(Dimensions.get('window').width * 0.045)),
-    lineHeight: Math.min(26, Math.round(Dimensions.get('window').width * 0.065)),
+    fontSize: Math.min(22, Math.round(Dimensions.get('window').width * 0.055)),
+    lineHeight: Math.min(30, Math.round(Dimensions.get('window').width * 0.075)),
     fontWeight: 'bold',
+  },
+  hijriDate: {
+    fontSize: isTablet 
+      ? Math.min(22, SCREEN_WIDTH * 0.04)
+      : Math.min(18, SCREEN_WIDTH * 0.055),
+    marginTop: '1%',
+    textAlign: 'center',
+    opacity: 0.9,
+  },
+  arabicHijriDate: {
+    fontFamily: 'Scheherazade',
+    fontSize: isTablet 
+      ? Math.min(32, SCREEN_WIDTH * 0.06)
+      : Math.min(28, SCREEN_WIDTH * 0.07),
+    lineHeight: isTablet 
+      ? Math.min(40, SCREEN_WIDTH * 0.075)
+      : Math.min(34, SCREEN_WIDTH * 0.085),
+  },
+  countdownContainer: {
+    borderRadius: 10,
+    padding: isTablet ? 16 : 12,
+    width: '100%',
+    alignSelf: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    marginBottom: SCREEN_HEIGHT < 700 ? 10 : (ASPECT_RATIO > 1.6 ? -50 : -30),
+    marginTop: SCREEN_HEIGHT < 700 ? 5 : (isTablet ? 15 : 10),
+  },
+  countdownTitle: {
+    color: '#ffffff',
+    fontSize: isTablet 
+      ? Math.min(20, SCREEN_WIDTH * 0.03)
+      : Math.min(16, SCREEN_WIDTH * 0.04),
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: isTablet ? 10 : 8,
+  },
+  timeBoxesContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 0,
+  },
+  timeBox: {
+    alignItems: 'center',
+  },
+  timeBoxInner: {
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: 8,
+    paddingHorizontal: SCREEN_HEIGHT < 700 ? 8 : (isTablet ? 15 : 10),
+    paddingVertical: SCREEN_HEIGHT < 700 ? 4 : (isTablet ? 8 : 6),
+    minWidth: SCREEN_HEIGHT < 700 ? 45 : (isTablet ? 70 : 50),
+  },
+  timeBoxText: {
+    color: '#ffffff',
+    fontSize: SCREEN_HEIGHT < 700 ? 20 : (isTablet ? 32 : 24),
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  timeBoxLabel: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: SCREEN_HEIGHT < 700 ? 8 : (isTablet ? 12 : 10),
+    marginTop: SCREEN_HEIGHT < 700 ? 2 : (isTablet ? 4 : 3),
+  },
+  timeBoxSeparator: {
+    color: '#ffffff',
+    fontSize: SCREEN_HEIGHT < 700 ? 20 : (isTablet ? 32 : 24),
+    fontWeight: 'bold',
+    marginHorizontal: SCREEN_HEIGHT < 700 ? 4 : (isTablet ? 10 : 6),
+  },
+  countdownContainerRTL: {
+    flexDirection: 'row-reverse',
+  },
+  countdownTitleRTL: {
+    fontFamily: 'Scheherazade',
+    fontSize: isTablet 
+      ? Math.min(24, SCREEN_WIDTH * 0.04)
+      : Math.min(20, SCREEN_WIDTH * 0.05),
+  },
+  timeBoxLabelRTL: {
+    fontFamily: 'Scheherazade',
+    fontSize: isTablet ? 14 : 12,
+  },
+  prayerTime: {
+    fontSize: SCREEN_HEIGHT < 700 
+      ? Math.min(16, SCREEN_WIDTH * 0.04)
+      : Math.min(18, SCREEN_WIDTH * 0.045),
+    fontWeight: '600',
+    color: '#006400',
+    marginRight: 10,
+  },
+  prayerTimeDark: {
+    color: '#ffffff',
+  },
+  arabicPrayerTime: {
+    fontFamily: 'Scheherazade',
+    fontSize: SCREEN_HEIGHT < 700 
+      ? Math.min(18, SCREEN_WIDTH * 0.045)
+      : Math.min(20, SCREEN_WIDTH * 0.05),
+    marginLeft: 10,
+    marginRight: 0,
+  },
+  additionalTime: {
+    fontSize: SCREEN_HEIGHT < 700 
+      ? Math.min(12, SCREEN_WIDTH * 0.03)
+      : Math.min(14, SCREEN_WIDTH * 0.035),
+    color: '#666666',
+    marginTop: 2,
+  },
+  additionalTimeDark: {
+    color: '#999999',
+  },
+  arabicAdditionalTime: {
+    fontFamily: 'Scheherazade',
+    fontSize: SCREEN_HEIGHT < 700 
+      ? Math.min(14, SCREEN_WIDTH * 0.035)
+      : Math.min(16, SCREEN_WIDTH * 0.04),
+    textAlign: 'right',
   },
 });
 

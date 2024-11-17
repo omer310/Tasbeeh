@@ -310,27 +310,27 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
     const getIndicatorContent = () => {
       if (isQiblaAligned) {
         return {
-          prefix: getTranslatedText('youAreFacingMakkah'),
-          highlight: '',
-          color: '#059669' // Green color for the highlight
+          prefix: "You're facing ",
+          highlight: "Makkah",
         };
       }
       
       const isRight = angleDifference > 0;
       return {
-        prefix: isRight ? getTranslatedText('turnToYourRight') : getTranslatedText('turnToYourLeft'),
-        highlight: '',
-        color: '#059669' // Green color for the highlight
+        prefix: "Turn to your ",
+        highlight: isRight ? "right" : "left",
       };
     };
 
     const content = getIndicatorContent();
 
     return (
-      <View style={styles.directionContainer}>
-        <Text style={styles.directionText}>
-          <Text style={[styles.prefixText, { color: content.color }]}>{content.prefix}</Text>
-          <Text style={[styles.highlightText, { color: content.color }]}>
+      <View style={directionStyles.container}>
+        <Text style={directionStyles.text}>
+          <Text style={directionStyles.prefix}>
+            {content.prefix}
+          </Text>
+          <Text style={directionStyles.highlight}>
             {content.highlight}
           </Text>
         </Text>
@@ -356,20 +356,18 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
             />
           )}
 
-          {/* Header Section with Title and Info Button */}
-          <View style={styles.headerContainer}>
-            <View style={styles.titleWrapper}>
-              <View style={styles.titleContainer}>
-                <Text style={[styles.title, { color: themeColors.textColor }]}>
-                  {getTranslatedText('qiblaDirection')}
-                </Text>
-              </View>
-            </View>
+          {/* Move DirectionIndicator to the top */}
+          <View style={styles.topSection}>
+            <DirectionIndicator 
+              angleDifference={qiblaDirection && compassHeading ? 
+                ((qiblaDirection - compassHeading + 540) % 360) - 180 : 0
+              }
+              themeColors={themeColors}
+            />
+            
+            {/* Move info button next to the direction text */}
             <TouchableOpacity 
-              style={[
-                styles.infoButton,
-                { backgroundColor: 'rgba(255, 255, 255, 0.8)' }
-              ]}
+              style={styles.infoButton}
               onPress={() => setShowInstructions(true)}
             >
               <Ionicons 
@@ -386,16 +384,6 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
               outputRange: ['360deg', '0deg'],
             })}
           />
-
-          {/* Add the DirectionIndicator to your return statement, just before the status container */}
-          <View style={styles.directionContainer}>
-            <DirectionIndicator 
-              angleDifference={qiblaDirection && compassHeading ? 
-                ((qiblaDirection - compassHeading + 540) % 360) - 180 : 0
-              }
-              themeColors={themeColors}
-            />
-          </View>
         </View>
       </View>
     </ImageBackground>
@@ -417,23 +405,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
     height: '100%',
-    paddingTop: 80,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40, // Adjusted for status bar
     paddingBottom: 30,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  titleContainer: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    textAlign: 'center',
-    top: 65,
   },
   compassWrapper: {
     position: 'relative',
@@ -522,66 +500,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   infoButton: {
-    position: 'absolute',
-    right: 20,
-    top: '100%',
-    transform: [{ translateY: -22 }],
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     padding: 8,
     borderRadius: 20,
+    marginLeft: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 3,
+    left: -10,
+    top: -20,
   },
   blurView: {
     borderRadius: 20,
     backgroundColor: 'transparent',
   },
-  headerContainer: {
+  topSection: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     width: '100%',
     paddingHorizontal: 20,
     marginBottom: 20,
-    position: 'relative',
   },
-  titleWrapper: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  directionContainer: {
-    position: 'absolute',
-    bottom: '15%',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  directionText: {
-    fontSize: 28,
-    textAlign: 'center',
-    fontWeight: '700',
-  },
-
-  prefixText: {
-    color: '#064e3b', // Dark green for regular text
-    fontWeight: '700',
-  },
-
-  highlightText: {
-    fontWeight: '700',
-    color: '#059669',
-    textShadowColor: 'rgba(5, 150, 105, 0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-
   centerTextContainer: {
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
   },
+});
+
+// Separate styles for the direction indicator
+const directionStyles = StyleSheet.create({
+  container: {
+    width: '100%',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    top: '25%',
+    left: 40,
+  },
+  text: {
+    fontSize: 28,
+    textAlign: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  prefix: {
+    color: '#1F2937', // Dark gray/almost black from the image
+    fontSize: 28,
+    fontWeight: '400', // Regular weight for prefix
+    letterSpacing: 0.3,
+  },
+  highlight: {
+    fontSize: 28,
+    fontWeight: '600', // Semi-bold for the highlighted word
+    color: '#15803D', // Matching the exact green from the images
+    letterSpacing: 0.3,
+  }
 });
