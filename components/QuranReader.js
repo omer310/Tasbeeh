@@ -19,7 +19,7 @@ function QuranReader({ navigation, themeColors }) {
   const [selectedSurah, setSelectedSurah] = useState(null);
   const [surahs, setSurahs] = useState([]);
   const [filteredSurahs, setFilteredSurahs] = useState([]);
-  const [showSurahList, setShowSurahList] = useState(false);
+  const [showSurahList, setShowSurahList] = useState(true);
   const [currentJuz, setCurrentJuz] = useState(16);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -177,10 +177,14 @@ function QuranReader({ navigation, themeColors }) {
 
   const handleGestureEvent = ({ nativeEvent }) => {
     if (nativeEvent.state === State.END) {
-      if (nativeEvent.translationX > 50) {
-        setCurrentPage((prevPage) => Math.max(prevPage - 1, 1));
-      } else if (nativeEvent.translationX < -50) {
-        setCurrentPage((prevPage) => Math.min(prevPage + 1, 604));
+      if (Math.abs(nativeEvent.translationX) > 50) {  // Check if swipe is significant enough
+        if (nativeEvent.translationX > 0) {
+          // Swipe right - go to next page (opposite of before)
+          setCurrentPage((prevPage) => Math.min(prevPage + 1, 604));
+        } else {
+          // Swipe left - go to previous page (opposite of before)
+          setCurrentPage((prevPage) => Math.max(prevPage - 1, 1));
+        }
       }
     }
   };
@@ -645,8 +649,7 @@ const styles = StyleSheet.create({
   pageImage: {
     width: '100%',
     height: '100%',
-    aspectRatio: 0.6, // Adjust this value based on your image aspect ratio
-    
+    aspectRatio: 0.6,
   },
   loadingContainer: {
     position: 'absolute',

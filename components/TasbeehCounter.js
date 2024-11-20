@@ -215,14 +215,32 @@ const TasbeehCounter = ({ themeColors, language = 'en' }) => {
     goalContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 10,
+      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+      borderRadius: 25,
+      marginBottom: 20,
+      backdropFilter: 'blur(10px)',
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.2)',
     },
     goalText: {
       color: themeColors.textColor,
-      marginRight: 10,
+      fontSize: 16,
+      fontWeight: '500',
+      opacity: 0.8,
+    },
+    goalProgress: {
+      color: themeColors.primary,
+      fontSize: 16,
+      fontWeight: 'bold',
+      marginHorizontal: 8,
     },
     cancelGoalButton: {
-      padding: 5,
+      padding: 4,
+      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+      borderRadius: 12,
+      marginLeft: 5,
     },
   });
 
@@ -361,10 +379,16 @@ const TasbeehCounter = ({ themeColors, language = 'en' }) => {
         {adhkars[selectedAdhkar].goal > 0 && (
           <View style={styles.goalContainer}>
             <Text style={styles.goalText}>
-              {language === 'ar' ? `الهدف: ${adhkars[selectedAdhkar].goal}` : `Goal: ${adhkars[selectedAdhkar].goal}`}
+              {language === 'ar' ? 'الهدف:' : 'Goal:'} 
+            </Text>
+            <Text style={styles.goalProgress}>
+              {language === 'ar' 
+                ? toArabicNumerals(adhkars[selectedAdhkar].goal)
+                : adhkars[selectedAdhkar].goal
+              }
             </Text>
             <TouchableOpacity style={styles.cancelGoalButton} onPress={cancelGoal}>
-              <Icon name="x" size={20} color={themeColors.primary} />
+              <Icon name="x" size={16} color={themeColors.primary} />
             </TouchableOpacity>
           </View>
         )}
@@ -428,8 +452,16 @@ const TasbeehCounter = ({ themeColors, language = 'en' }) => {
           animationType="fade"
           onRequestClose={() => setGoalModalVisible(false)}
         >
-          <View style={styles.goalModal}>
-            <View style={styles.goalModalContent}>
+          <TouchableOpacity 
+            style={styles.goalModal} 
+            activeOpacity={1} 
+            onPress={() => setGoalModalVisible(false)}
+          >
+            <TouchableOpacity 
+              style={styles.goalModalContent} 
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+            >
               <TextInput
                 style={styles.goalInput}
                 onChangeText={setGoalInput}
@@ -441,8 +473,8 @@ const TasbeehCounter = ({ themeColors, language = 'en' }) => {
               <TouchableOpacity style={styles.goalButton} onPress={setGoal}>
                 <Text style={styles.goalButtonText}>{language === 'ar' ? "تعيين الهدف" : "Set Goal"}</Text>
               </TouchableOpacity>
-            </View>
-          </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
         </Modal>
 
         <Modal

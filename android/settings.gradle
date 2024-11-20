@@ -44,7 +44,7 @@ if (getRNMinorVersion() >= 75) {
   }
 }
 
-rootProject.name = 'TasbeehApp'
+rootProject.name = 'Manarat Al-Muslim'
 
 dependencyResolutionManagement {
   versionCatalogs {

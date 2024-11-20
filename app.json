@@ -15,7 +15,9 @@
       "supportsTablet": true,
       "infoPlist": {
         "UIBackgroundModes": [
-          "audio"
+          "audio",
+          "fetch",
+          "remote-notification"
         ],
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
@@ -33,12 +35,13 @@
       },
       "icon": "./assets/icon2.png",
       "permissions": [
+        "NOTIFICATIONS",
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM",
         "RECEIVE_BOOT_COMPLETED",
-        "WAKE_LOCK",
-        "FOREGROUND_SERVICE",
-        "SCHEDULE_EXACT_ALARM"
+        "WAKE_LOCK"
       ],
-      "package": "com.omer310.TasbeehApp",
+      "package": "com.manaratalmuslim",
       "useNextNotificationsApi": true,
       "runtimeVersion": "1.0.0",
       "config": {

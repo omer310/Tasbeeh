@@ -27,9 +27,14 @@ import * as TaskManager from 'expo-task-manager';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Audio } from 'expo-av';
 import { BACKGROUND_NOTIFICATION_TASK } from './constants/NotificationConstants';
+import Onboarding from './components/Onboarding';
+import SplashScreen from './components/SplashScreen';
+import MyDuas from './components/MyDuas';
+import { DuaContext, DuaProvider } from './contexts/DuaContext';
 
 const Tab = createBottomTabNavigator();
 const DuasStack = createStackNavigator();
+const Stack = createStackNavigator();
 
 const BACKGROUND_FETCH_TASK = 'background-fetch-task';
 
@@ -46,27 +51,50 @@ Notifications.setNotificationHandler({
 });
 
 function DuasStackScreen({ themeColors, language }) {
+  const { myDuas, favorites, onToggleFavorite, onAddNote, onAddToCollection } = 
+    React.useContext(DuaContext);
+
   return (
     <DuasStack.Navigator screenOptions={{ headerShown: false }}>
       <DuasStack.Screen 
         name="DuasHome" 
         component={Duas} 
-        initialParams={{ themeColors, language }} 
+        initialParams={{ 
+          themeColors, 
+          language
+        }} 
       />
       <DuasStack.Screen 
         name="DuaList" 
         component={DuaList} 
-        initialParams={{ themeColors, language }} 
+        initialParams={{ 
+          themeColors, 
+          language
+        }} 
+      />
+      <DuasStack.Screen 
+        name="MyDuas" 
+        component={MyDuas} 
+        initialParams={{ 
+          themeColors, 
+          language
+        }} 
       />
       <DuasStack.Screen 
         name="DuaDetails" 
         component={DuaDetails} 
-        initialParams={{ themeColors, language }} 
+        initialParams={{ 
+          themeColors, 
+          language
+        }} 
       />
       <DuasStack.Screen 
         name="AddCustomDua" 
         component={AddCustomDua} 
-        initialParams={{ themeColors, language }} 
+        initialParams={{ 
+          themeColors, 
+          language 
+        }} 
       />
     </DuasStack.Navigator>
   );
@@ -168,39 +196,144 @@ function ScreenWrapper({ children, style, themeColors }) {
   );
 }
 
-function MainTabNavigator() {
+function MainAppContent({ 
+  themeColors, 
+  language, 
+  darkMode, 
+  toggleDarkMode, 
+  theme, 
+  changeTheme, 
+  selectedFont, 
+  changeFont, 
+  changeLanguage 
+}) {
   return (
-    <Tab.Navigator>
-      <Tab.Screen
-        name="PrayerTimes"
-        component={PrayerTimes}
-        options={{ tabBarLabel: 'Prayer Times' }}
-      />
-      <Tab.Screen
-        name="TasbeehCounter"
-        component={TasbeehCounter}
-        options={{ tabBarLabel: 'Tasbeeh Counter' }}
-      />
-      <Tab.Screen
-        name="Duas"
-        component={Duas}
-        options={{ tabBarLabel: 'Duas' }}
-      />
-      <Tab.Screen
-        name="QiblaDirection"
-        component={QiblaDirection}
-        options={{ tabBarLabel: 'Qibla Direction' }}
-      />
-      <Tab.Screen
-        name="QuranReader"
-        component={QuranReader}
-        options={{ tabBarLabel: 'Quran Reader' }}
-      />
-      <Tab.Screen
-        name="Settings"
-        component={Settings}
-        options={{ tabBarLabel: 'Settings' }}
-      />
+    <Tab.Navigator
+      tabBar={props => (
+        <CustomTabBar {...props} themeColors={themeColors} />
+      )}
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconSource;
+          let iconStyle = {
+            width: focused ? size * 1.6 : size,
+            height: focused ? size * 1.4 : size,
+            tintColor: focused ? themeColors.activeTabColor : 'gray',
+            resizeMode: 'contain',
+            marginBottom: 4,
+            marginTop: 6,
+            opacity: focused ? 1 : 0.7
+          };
+
+          if (route.name === 'Prayer Times') {
+            iconSource = require('./assets/prayer-time.png');
+          } else if (route.name === 'Quran') {
+            iconSource = require('./assets/Quran-icon.png');
+            iconStyle = {
+              ...iconStyle,
+              width: focused ? size * 2.5 : size * 1.8,
+              height: focused ? size * 2.5 : size * 1.8,
+              marginTop: 0,
+              marginBottom: 0
+            };
+          } else if (route.name === 'Tasbeeh') {
+            iconSource = require('./assets/Tasbeeh.png');
+          } else if (route.name === 'Qibla') {
+            iconSource = require('./assets/qibla-arrow.png');
+          } else if (route.name === 'Calendar') {
+            iconSource = require('./assets/islamic-calendar.png');
+          } else if (route.name === 'Hadith') {
+            iconSource = require('./assets/Hadith-icon.png');
+          } else if (route.name === 'Duas') {
+            iconSource = require('./assets/Duas-icon.png');
+          } else if (route.name === 'Settings') {
+            iconSource = require('./assets/SettingsFocused.png');
+          }
+
+          return (
+            <Image
+              source={iconSource}
+              style={iconStyle}
+            />
+          );
+        },
+        tabBarActiveTintColor: themeColors.activeTabColor,
+        tabBarInactiveTintColor: 'gray',
+        tabBarStyle: {
+          display: 'none',
+        },
+      })}
+    >
+      <Tab.Screen name="Prayer Times">
+        {(props) => (
+          <View style={{ flex: 1 }}>
+            <PrayerTimes 
+              {...props} 
+              themeColors={themeColors} 
+              language={language}
+              registerForPushNotificationsAsync={registerForPushNotificationsAsync}
+              isDarkMode={darkMode}
+            />
+          </View>
+        )}
+      </Tab.Screen>
+      <Tab.Screen name="Quran">
+        {(props) => (
+          <ScreenWrapper themeColors={themeColors}>
+            <ErrorBoundary>
+              <QuranReader {...props} themeColors={themeColors} language={language} />
+            </ErrorBoundary>
+          </ScreenWrapper>
+        )}
+      </Tab.Screen>
+      <Tab.Screen name="Tasbeeh">
+        {(props) => (
+          <ScreenWrapper themeColors={themeColors}>
+            <TasbeehCounter {...props} themeColors={themeColors} language={language} />
+          </ScreenWrapper>
+        )}
+      </Tab.Screen>
+      <Tab.Screen name="Duas">
+        {(props) => (
+          <ScreenWrapper themeColors={themeColors}>
+            <DuasStackScreen {...props} themeColors={themeColors} language={language} />
+          </ScreenWrapper>
+        )}
+      </Tab.Screen>
+      <Tab.Screen name="Qibla">
+        {(props) => <QiblaDirection isDarkMode={darkMode} language={language} />}
+      </Tab.Screen>
+      <Tab.Screen name="Calendar">
+        {(props) => (
+          <ScreenWrapper themeColors={themeColors}>
+            <ScrollView contentContainerStyle={styles.calendarContent}>
+              <IslamicCalendar {...props} themeColors={themeColors} language={language} />
+            </ScrollView>
+          </ScreenWrapper>
+        )}
+      </Tab.Screen>
+      <Tab.Screen name="Hadith">
+        {(props) => (
+          <HadithOfTheDay {...props} themeColors={themeColors} language={language} />
+        )}
+      </Tab.Screen>
+      <Tab.Screen name="Settings">
+        {(props) => (
+          <Settings
+            {...props}
+            darkMode={darkMode}
+            toggleDarkMode={toggleDarkMode}
+            theme={theme}
+            changeTheme={changeTheme}
+            themeColors={themeColors}
+            selectedFont={selectedFont}
+            changeFont={changeFont}
+            language={language}
+            changeLanguage={changeLanguage}
+          />
+        )}
+      </Tab.Screen>
     </Tab.Navigator>
   );
 }
@@ -345,28 +478,86 @@ export default function App() {
   const notificationListener = useRef();
   const responseListener = useRef();
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [myDuas, setMyDuas] = useState([]);
+  const [favorites, setFavorites] = useState({});
+  const [notes, setNotes] = useState({});
 
   useEffect(() => {
-    loadSettings();
-    loadFonts();
-    setupLanguage();
-    registerForPushNotificationsAsync();
+    const initializeApp = async () => {
+      try {
+        // Load all necessary settings
+        await loadSettings();
+        await loadFonts();
+        await setupLanguage();
+        await registerForPushNotificationsAsync();
+        
+        // Check onboarding status
+        const status = await AsyncStorage.getItem('hasCompletedOnboarding');
+        setHasCompletedOnboarding(status === 'true');
 
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      setNotification(notification);
-    });
+        // Setup notifications
+        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+          setNotification(notification);
+        });
 
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log(response);
-    });
+        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+          console.log(response);
+        });
 
-    registerBackgroundFetchAsync();
+        await registerBackgroundFetchAsync();
+        
+        // Add a small delay to ensure smooth transition
+        setTimeout(() => {
+          setIsLoading(false);
+        }, 2000);
+      } catch (error) {
+        console.error('Error initializing app:', error);
+        setIsLoading(false);
+      }
+    };
+
+    initializeApp();
 
     return () => {
       Notifications.removeNotificationSubscription(notificationListener.current);
       Notifications.removeNotificationSubscription(responseListener.current);
     };
   }, []);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const savedMyDuas = await AsyncStorage.getItem('myDuas');
+        const savedFavorites = await AsyncStorage.getItem('favorites');
+        const savedNotes = await AsyncStorage.getItem('notes');
+        
+        if (savedMyDuas) setMyDuas(JSON.parse(savedMyDuas));
+        if (savedFavorites) setFavorites(JSON.parse(savedFavorites));
+        if (savedNotes) setNotes(JSON.parse(savedNotes));
+      } catch (error) {
+        console.error('Error loading data:', error);
+      }
+    };
+    
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    const saveData = async () => {
+      try {
+        await AsyncStorage.setItem('myDuas', JSON.stringify(myDuas));
+        await AsyncStorage.setItem('favorites', JSON.stringify(favorites));
+        await AsyncStorage.setItem('notes', JSON.stringify(notes));
+      } catch (error) {
+        console.error('Error saving data:', error);
+      }
+    };
+    
+    saveData();
+  }, [myDuas, favorites, notes]);
 
   const setupLanguage = async () => {
     const savedLanguage = await AsyncStorage.getItem('language');
@@ -446,143 +637,117 @@ export default function App() {
     darkSecondaryTextColor: '#BBBBBB',
   };
 
-  if (!fontsLoaded) {
-    return null;
+  const handleOnboardingComplete = async () => {
+    try {
+      await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+      setHasCompletedOnboarding(true);
+    } catch (error) {
+      console.error('Error saving onboarding status:', error);
+    }
+  };
+
+  const handleToggleFavorite = (dua) => {
+    setFavorites(prev => {
+      const newFavorites = { ...prev };
+      if (newFavorites[dua.id]) {
+        delete newFavorites[dua.id];
+        // Remove from myDuas if unfavorited
+        setMyDuas(current => current.filter(d => d.id !== dua.id));
+      } else {
+        newFavorites[dua.id] = true;
+        // Add to myDuas if favorited
+        setMyDuas(current => {
+          if (!current.find(d => d.id === dua.id)) {
+            return [...current, { ...dua, parentCategory: dua.category }];
+          }
+          return current;
+        });
+      }
+      return newFavorites;
+    });
+  };
+
+  const handleAddNote = (duaId, note) => {
+    setNotes(prev => ({
+      ...prev,
+      [duaId]: note
+    }));
+    
+    // Update the note in myDuas and add the dua if it's not already there
+    setMyDuas(current => {
+      const existingDua = current.find(dua => dua.id === duaId);
+      if (existingDua) {
+        // Update existing dua
+        return current.map(dua => 
+          dua.id === duaId 
+            ? { ...dua, note } 
+            : dua
+        );
+      } else {
+        // Find the dua in the category and add it with the note
+        const dua = category.subcategories.find(d => d.id === duaId);
+        if (dua) {
+          return [...current, { ...dua, note, parentCategory: category }];
+        }
+        return current;
+      }
+    });
+  };
+
+  const handleAddToCollection = (dua) => {
+    setMyDuas(current => {
+      const existingDua = current.find(d => d.id === dua.id);
+      if (!existingDua) {
+        // Add the dua with its category information
+        return [...current, { 
+          ...dua, 
+          parentCategory: dua.category || category, // Use the dua's category or current category
+          addedToCollection: true 
+        }];
+      }
+      return current;
+    });
+
+    // Also mark it as favorite
+    setFavorites(prev => ({
+      ...prev,
+      [dua.id]: true
+    }));
+  };
+
+  if (!fontsLoaded || isLoading) {
+    return <SplashScreen isDarkMode={darkMode} />;
+  }
+
+  if (!hasCompletedOnboarding) {
+    return <Onboarding 
+      onComplete={handleOnboardingComplete} 
+      changeLanguage={changeLanguage}
+    />;
   }
 
   return (
-    <NavigationContainer>
-      <Tab.Navigator
-        tabBar={props => {
-          if (props.state.routes[props.state.index].params?.tabBarVisible === false) {
-            return null;
-          }
-          return <CustomTabBar {...props} themeColors={themeColors} />;
-        }}
-        screenOptions={({ route }) => ({
-          headerShown: false,
-          tabBarIcon: ({ focused, color, size }) => {
-            let iconSource;
-            let iconStyle = {
-              width: focused ? size * 1.6 : size,
-              height: focused ? size * 1.4 : size,
-              tintColor: focused ? themeColors.activeTabColor : 'gray',
-              resizeMode: 'contain',
-              marginBottom: 4,
-              marginTop: 6,
-              opacity: focused ? 1 : 0.7
-            };
-
-            if (route.name === 'Prayer Times') {
-              iconSource = require('./assets/prayer-time.png');
-            } else if (route.name === 'Quran') {
-              iconSource = require('./assets/Quran-icon.png');
-              iconStyle = {
-                ...iconStyle,
-                width: focused ? size * 2.5 : size * 1.8,
-                height: focused ? size * 2.5 : size * 1.8,
-                marginTop: 0,
-                marginBottom: 0
-              };
-            } else if (route.name === 'Tasbeeh') {
-              iconSource = require('./assets/Tasbeeh.png');
-            } else if (route.name === 'Qibla') {
-              iconSource = require('./assets/qibla-arrow.png');
-            } else if (route.name === 'Calendar') {
-              iconSource = require('./assets/islamic-calendar.png');
-            } else if (route.name === 'Hadith') {
-              iconSource = require('./assets/Hadith-icon.png');
-            } else if (route.name === 'Duas') {
-              iconSource = require('./assets/Duas-icon.png');
-            } else if (route.name === 'Settings') {
-              iconSource = require('./assets/SettingsFocused.png');
-            }
-
-            return (
-              <Image
-                source={iconSource}
-                style={iconStyle}
-              />
-            );
-          },
-          tabBarActiveTintColor: themeColors.activeTabColor,
-          tabBarInactiveTintColor: 'gray',
-          tabBarStyle: {
-            display: 'none',
-          },
-        })}
-      >
-        <Tab.Screen name="Prayer Times">
-          {(props) => (
-            <View style={{ flex: 1 }}>
-              <PrayerTimes 
-                {...props} 
-                themeColors={themeColors} 
+    <DuaProvider>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="MainApp">
+            {() => (
+              <MainAppContent 
+                themeColors={themeColors}
                 language={language}
-                registerForPushNotificationsAsync={registerForPushNotificationsAsync}
-                isDarkMode={darkMode}
+                darkMode={darkMode}
+                toggleDarkMode={toggleDarkMode}
+                theme={theme}
+                changeTheme={changeTheme}
+                selectedFont={selectedFont}
+                changeFont={changeFont}
+                changeLanguage={changeLanguage}
               />
-            </View>
-          )}
-        </Tab.Screen>
-        <Tab.Screen name="Quran">
-          {(props) => (
-            <ScreenWrapper themeColors={themeColors}>
-              <ErrorBoundary>
-                <QuranReader {...props} themeColors={themeColors} language={language} />
-              </ErrorBoundary>
-            </ScreenWrapper>
-          )}
-        </Tab.Screen>
-        <Tab.Screen name="Tasbeeh">
-          {(props) => (
-            <ScreenWrapper themeColors={themeColors}>
-              <TasbeehCounter {...props} themeColors={themeColors} language={language} />
-            </ScreenWrapper>
-          )}
-        </Tab.Screen>
-        <Tab.Screen name="Duas">
-          {(props) => (
-            <ScreenWrapper themeColors={themeColors}>
-              <DuasStackScreen {...props} themeColors={themeColors} language={language} />
-            </ScreenWrapper>
-          )}
-        </Tab.Screen>
-        <Tab.Screen name="Qibla">
-          {(props) => <QiblaDirection isDarkMode={isDarkMode} language={language} />}
-        </Tab.Screen>
-        <Tab.Screen name="Calendar">
-          {(props) => (
-            <ScreenWrapper themeColors={themeColors}>
-              <ScrollView contentContainerStyle={styles.calendarContent}>
-                <IslamicCalendar {...props} themeColors={themeColors} language={language} />
-              </ScrollView>
-            </ScreenWrapper>
-          )}
-        </Tab.Screen>
-        <Tab.Screen name="Hadith">
-          {(props) => (
-            <HadithOfTheDay {...props} themeColors={themeColors} language={language} />
-          )}
-        </Tab.Screen>
-        <Tab.Screen name="Settings">
-          {(props) => (
-            <Settings
-              {...props}
-              darkMode={darkMode}
-              toggleDarkMode={toggleDarkMode}
-              theme={theme}
-              changeTheme={changeTheme}
-              themeColors={themeColors}
-              selectedFont={selectedFont}
-              changeFont={changeFont}
-              language={language}
-              changeLanguage={changeLanguage}
-            />
-          )}
-        </Tab.Screen>
-      </Tab.Navigator>
-    </NavigationContainer>
+            )}
+          </Stack.Screen>
+        </Stack.Navigator>
+      </NavigationContainer>
+    </DuaProvider>
   );
 }
 

@@ -4,21 +4,15 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
-import { Audio } from 'expo-av';
+import { 
+  schedulePrayerNotifications,
+  requestNotificationPermissions,
+  BACKGROUND_NOTIFICATION_TASK 
+} from '../services/NotificationService';
 import PrayerTimeSettings from './PrayerTimeSettings';
 import AdhanPreferenceModal from './AdhanPreferencesModal';
 import { format } from 'date-fns';
-import { BACKGROUND_NOTIFICATION_TASK } from '../constants/NotificationConstants';
 import { LinearGradient } from 'expo-linear-gradient';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const ASPECT_RATIO = SCREEN_HEIGHT / SCREEN_WIDTH;
@@ -34,7 +28,7 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     showImsak: false,
     autoDetectLocation: true,
     automaticSettings: true,
-    location: 'United States',
+    location: '',
     calculationMethodId: 2,
   });
   const [playAdhan, setPlayAdhan] = useState(true);
@@ -161,27 +155,78 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
   useEffect(() => {
     const setup = async () => {
       try {
-        // Request notifications permission
-        const { status } = await Notifications.requestPermissionsAsync({
-          ios: {
-            allowAlert: true,
-            allowBadge: true,
-            allowSound: true,
-            allowAnnouncements: true,
-          },
-        });
+        setIsLoading(true);
+        
+        // Request notification permissions first
+        await requestNotificationPermissions();
+        
+        // First check for saved location
+        const savedLocation = await AsyncStorage.getItem('location');
+        
+        if (savedLocation) {
+          // If we have a saved location, use it immediately
+          setSettings(prev => ({
+            ...prev,
+            location: savedLocation,
+            autoDetectLocation: true,
+            automaticSettings: true,
+          }));
+        }
+        
+        // Then try to get current location
+        const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
+        if (locationStatus === 'granted') {
+          const locationResult = await Location.getCurrentPositionAsync({});
+          const { latitude, longitude } = locationResult.coords;
+          
+          let geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
+          if (geocode[0]) {
+            const newCity = geocode[0].city || geocode[0].subregion || '';
+            const newCountry = geocode[0].country || '';
+            const newLocation = newCity ? `${newCity}, ${newCountry}` : newCountry;
+            
+            // Update settings state immediately
+            setSettings(prev => ({
+              ...prev,
+              location: newLocation,
+              autoDetectLocation: true,
+              automaticSettings: true,
+              latitude,
+              longitude,
+            }));
 
-        if (status !== 'granted') {
-          console.log('Notification permissions not granted');
-          return;
+            // Save to AsyncStorage
+            await AsyncStorage.multiSet([
+              ['location', newLocation],
+              ['autoDetectLocation', 'true'],
+              ['automaticSettings', 'true'],
+              ['latitude', latitude.toString()],
+              ['longitude', longitude.toString()],
+            ]);
+
+            // Fetch prayer times with the new location
+            await fetchPrayerTimes(latitude, longitude);
+          }
         }
 
+        // Load other settings and prayer times
         await loadSettings();
-        await loadAdhanPreferences();
         await loadCachedPrayerTimes();
-        await schedulePrayerNotifications();
+        
+        // After loading prayer times and settings
+        if (prayerTimesRef.current) {
+          await schedulePrayerNotifications(
+            prayerTimesRef.current,
+            adhanPreferences,
+            playAdhan
+          );
+        }
+        
       } catch (error) {
         console.error('Error in setup:', error);
+        setError('Failed to initialize. Please check your settings.');
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -208,8 +253,16 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
   const loadSettings = async () => {
     try {
       const savedSettings = await AsyncStorage.getItem('prayerTimeSettings');
+      const currentLocation = await AsyncStorage.getItem('location');
+      
       if (savedSettings) {
-        setSettings(JSON.parse(savedSettings));
+        const parsedSettings = JSON.parse(savedSettings);
+        setSettings(prev => ({
+          ...parsedSettings,
+          location: currentLocation || prev.location || parsedSettings.location,
+          autoDetectLocation: true,
+          automaticSettings: true,
+        }));
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -234,37 +287,55 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     try {
       const today = format(new Date(), 'yyyy-MM-dd');
       const cachedData = await AsyncStorage.getItem(`prayerTimes_${today}`);
+      const currentLocation = await AsyncStorage.getItem('location');
+      
       if (cachedData) {
-        const { prayerTimes, location } = JSON.parse(cachedData);
+        const { prayerTimes } = JSON.parse(cachedData);
         prayerTimesRef.current = prayerTimes;
-        setSettings(prevSettings => ({ ...prevSettings, location }));
+        
+        if (currentLocation) {
+          setSettings(prev => ({ ...prev, location: currentLocation }));
+        }
+        
         updateNextPrayerAndCountdown();
-        setIsLoading(false);
       } else {
         await fetchPrayerTimes();
       }
     } catch (error) {
       console.error('Error loading cached prayer times:', error);
       setError('Failed to load prayer times. Please try again.');
-      setIsLoading(false);
     }
   };
 
-  const fetchPrayerTimes = async () => {
+  const fetchPrayerTimes = async (lat = null, lng = null) => {
     setIsLoading(true);
     setError(null);
     try {
       let coords;
-      if (settings.autoDetectLocation) {
+      if (lat && lng) {
+        coords = { latitude: lat, longitude: lng };
+      } else if (settings.autoDetectLocation) {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
           throw new Error('Permission to access location was denied');
         }
         const locationResult = await Location.getCurrentPositionAsync({});
         coords = locationResult.coords;
-      } else {
-        // Use the manually set location (implement geocoding here)
-        coords = { latitude: 0, longitude: 0 };
+        
+        // Update location name if we're getting new coordinates
+        let geocode = await Location.reverseGeocodeAsync(coords);
+        if (geocode[0]) {
+          const newCity = geocode[0].city || geocode[0].subregion || '';
+          const newCountry = geocode[0].country || '';
+          const newLocation = newCity ? `${newCity}, ${newCountry}` : newCountry;
+          
+          setSettings(prev => ({
+            ...prev,
+            location: newLocation
+          }));
+          
+          await AsyncStorage.setItem('location', newLocation);
+        }
       }
 
       const response = await axios.get(`https://api.aladhan.com/v1/timings`, {
@@ -286,10 +357,10 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
         location: settings.location,
       }));
 
-      setIsLoading(false);
     } catch (error) {
       console.error('Error fetching prayer times:', error);
       setError('Failed to fetch prayer times. Please check your internet connection and try again.');
+    } finally {
       setIsLoading(false);
     }
   };
@@ -451,128 +522,54 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     }
   };
 
-  const schedulePrayerNotifications = async () => {
-    try {
-      // Cancel existing notifications
-      let existingNotificationIds = await AsyncStorage.getItem('scheduledNotificationIds');
-      if (existingNotificationIds) {
-        existingNotificationIds = JSON.parse(existingNotificationIds);
-        for (let id of existingNotificationIds) {
-          await Notifications.cancelScheduledNotificationAsync(id);
-        }
-      }
-
-      const prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
-      const now = new Date();
-      const newNotificationIds = [];
-
-      // Register background task if not already registered
-      await Notifications.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK);
-
-      for (let prayer of prayers) {
-        const [hours, minutes] = prayerTimesRef.current[prayer].split(':').map(Number);
-        let prayerDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
-        
-        // If prayer time has passed, schedule for next day
-        if (prayerDate <= now) {
-          prayerDate.setDate(prayerDate.getDate() + 1);
-        }
-
-        const adhanPreference = adhanPreferences[prayer];
-        if (!playAdhan || adhanPreference === 'None') {
-          continue;
-        }
-
-        // Schedule the notification
-        const notificationId = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: `Time for ${prayer} Prayer`,
-            body: `It's time to pray ${prayer} (${prayerTimesRef.current[prayer]})`,
-            data: { prayer, adhanPreference },
-            sound: adhanPreference === 'Silent' ? null : 'default',
-            // Add priority for Android
-            priority: Notifications.AndroidNotificationPriority.MAX,
-          },
-          trigger: {
-            date: prayerDate,
-            // Enable precise timing for Android
-            channelId: 'prayer-times',
-          },
-        });
-        
-        newNotificationIds.push(notificationId);
-      }
-
-      // Save new notification IDs
-      await AsyncStorage.setItem('scheduledNotificationIds', JSON.stringify(newNotificationIds));
-    } catch (error) {
-      console.error('Error scheduling notifications:', error);
-    }
-  };
-
-  // Add this useEffect to create notification channel for Android
-  useEffect(() => {
-    const createNotificationChannel = async () => {
-      if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('prayer-times', {
-          name: 'Prayer Times',
-          importance: Notifications.AndroidImportance.MAX,
-          enableVibrate: true,
-          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-        });
-      }
+  const getPrayerGradient = (prayer, isDarkMode) => {
+    const gradients = {
+      Fajr: isDarkMode 
+        ? ['#1a4731', '#4CAF50'] 
+        : ['#2d8a5c', '#4CAF50'],
+      Dhuhr: isDarkMode 
+        ? ['#1a4731', '#4CAF50'] 
+        : ['#2d8a5c', '#4CAF50'],
+      Asr: isDarkMode 
+        ? ['#1a4731', '#4CAF50'] 
+        : ['#2d8a5c', '#4CAF50'],
+      Maghrib: isDarkMode 
+        ? ['#1a4731', '#4CAF50'] 
+        : ['#2d8a5c', '#4CAF50'],
+      Isha: isDarkMode 
+        ? ['#1a4731', '#4CAF50'] 
+        : ['#2d8a5c', '#4CAF50'],
+      default: isDarkMode 
+        ? ['#1a4731', '#4CAF50'] 
+        : ['#2d8a5c', '#4CAF50'],
     };
-
-    createNotificationChannel();
-  }, []);
-
-  const playAdhanSound = async (adhanPreference) => {
-    let soundFile;
-    switch (adhanPreference) {
-      case 'Adhan (Nureyn Mohammad)':
-        soundFile = require('../assets/adhan.mp3');
-        break;
-      case 'Adhan (Madina)':
-        soundFile = require('../assets/madinah_adhan.mp3');
-        break;
-      case 'Adhan (Makka)':
-        soundFile = require('../assets/makkah_adhan.mp3');
-        break;
-      case 'Long beep':
-        soundFile = require('../assets/long_beep.mp3');
-        break;
-      default:
-        return; // Don't play anything for other options
-    }
-
-    const { sound } = await Audio.Sound.createAsync(soundFile);
-    await sound.playAsync();
+    return gradients[prayer] || gradients.default;
   };
-
-  useEffect(() => {
-    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
-      const { adhanPreference } = notification.request.content.data;
-      if (playAdhan && adhanPreference && adhanPreference !== 'None' && adhanPreference !== 'Silent' && adhanPreference !== 'Default notification sound') {
-        playAdhanSound(adhanPreference);
-      }
-    });
-
-    return () => {
-      Notifications.removeNotificationSubscription(notificationListener);
-    };
-  }, [playAdhan, adhanPreferences]);
 
   const handleAdhanPreferenceChange = async (prayer, preference) => {
+    const newPreferences = { ...adhanPreferences, [prayer]: preference };
+    setAdhanPreferences(newPreferences);
     await AsyncStorage.setItem(`adhan_preference_${prayer}`, preference);
-    setAdhanPreferences(prev => ({ ...prev, [prayer]: preference }));
-    schedulePrayerNotifications();
+    
+    // Reschedule notifications with new preferences
+    if (prayerTimesRef.current) {
+      await schedulePrayerNotifications(
+        prayerTimesRef.current,
+        newPreferences,
+        playAdhan
+      );
+    }
   };
 
   const togglePlayAdhan = () => {
     const newValue = !playAdhan;
     setPlayAdhan(newValue);
     AsyncStorage.setItem('playAdhan', JSON.stringify(newValue));
-    schedulePrayerNotifications();
+    schedulePrayerNotifications(
+      prayerTimesRef.current,
+      adhanPreferences,
+      newValue
+    );
   };
 
   const handlePreferenceChange = (prayer, adhanType, reminderTime) => {
@@ -688,33 +685,9 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     }
   };
 
-  const getPrayerGradient = (prayer, isDarkMode) => {
-    const gradients = {
-      Fajr: isDarkMode 
-        ? ['#1a4731', '#4CAF50'] 
-        : ['#2d8a5c', '#4CAF50'],
-      Dhuhr: isDarkMode 
-        ? ['#1a4731', '#4CAF50'] 
-        : ['#2d8a5c', '#4CAF50'],
-      Asr: isDarkMode 
-        ? ['#1a4731', '#4CAF50'] 
-        : ['#2d8a5c', '#4CAF50'],
-      Maghrib: isDarkMode 
-        ? ['#1a4731', '#4CAF50'] 
-        : ['#2d8a5c', '#4CAF50'],
-      Isha: isDarkMode 
-        ? ['#1a4731', '#4CAF50'] 
-        : ['#2d8a5c', '#4CAF50'],
-      default: isDarkMode 
-        ? ['#1a4731', '#4CAF50'] 
-        : ['#2d8a5c', '#4CAF50'],
-    };
-    return gradients[prayer] || gradients.default;
-  };
-
   return (
     <ImageBackground 
-      source={require('../assets/islamic-pattern2.png')}
+      source={require('../assets/islamic-pattern3.png')}
       style={styles.background}
       imageStyle={[styles.backgroundImage, isDarkMode && styles.backgroundImageDark]}
       resizeMode="cover"
@@ -735,36 +708,101 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
         ) : prayerTimesRef.current ? (
           <>
             <View style={styles.header}>
-              <TouchableOpacity onPress={() => setSettingsModalVisible(true)} style={styles.locationContainer}>
-                <Ionicons name="location-outline" size={16} color={isDarkMode ? themeColors.darkSecondaryTextColor : themeColors.secondaryTextColor} />
+              <TouchableOpacity 
+                onPress={() => setSettingsModalVisible(true)} 
+                style={[
+                  styles.locationButton,
+                  isDarkMode && styles.locationButtonDark
+                ]}
+              >
+                <Ionicons 
+                  name="location-outline" 
+                  size={16} 
+                  color={isDarkMode ? '#4CAF50' : '#006400'} 
+                />
                 <Text style={[
-                  styles.subtitle,
-                  { color: isDarkMode ? themeColors.darkSecondaryTextColor : themeColors.secondaryTextColor },
-                  language === 'ar' && styles.arabicSubtitle
+                  styles.locationText,
+                  isDarkMode && styles.locationTextDark,
+                  language === 'ar' && styles.arabicLocationText
                 ]}>
-                  {settings.location}
+                  {settings.location || ''}
                 </Text>
               </TouchableOpacity>
-              <Text style={[styles.date, { color: isDarkMode ? themeColors.darkTextColor : themeColors.textColor }]}>
-                {new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', { 
-                  weekday: 'long',
-                  day: 'numeric', 
-                  month: 'long' 
-                })}
-              </Text>
-              <Text style={[
-                styles.hijriDate,
-                { color: isDarkMode ? themeColors.darkTextColor : themeColors.textColor },
-                language === 'ar' && styles.arabicHijriDate
+
+              <View style={[
+                styles.dateCard,
+                isDarkMode && styles.dateCardDark
               ]}>
-                {hijriDate ? (
-                  language === 'ar' 
-                    ? `${convertToArabicNumbers(hijriDate.day)} ${hijriDate.month} ${convertToArabicNumbers(hijriDate.year)}`
-                    : `${hijriDate.day} ${hijriDate.month} ${hijriDate.year}`
-                ) : (
-                  <ActivityIndicator size="small" color={themeColors.activeTabColor} />
-                )}
-              </Text>
+                <View style={styles.dateRow}>
+                  <View style={styles.dateColumn}>
+                    <View style={styles.dateMainContent}>
+                      <Text style={[
+                        styles.dateNumber,
+                        isDarkMode && styles.dateNumberDark
+                      ]}>
+                        {new Date().getDate()}
+                      </Text>
+                      <View style={styles.dateDetails}>
+                        <Text style={[
+                          styles.monthYear,
+                          isDarkMode && styles.monthYearDark
+                        ]}>
+                          {new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', { 
+                            month: 'long'
+                          }).split(' ')[0]}
+                        </Text>
+                        <Text style={[
+                          styles.weekday,
+                          isDarkMode && styles.weekdayDark
+                        ]}>
+                          {new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', { 
+                            weekday: 'long'
+                          }).split(' ')[0]}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.dateDivider} />
+
+                  <View style={styles.dateColumn}>
+                    {hijriDate ? (
+                      <View style={styles.dateMainContent}>
+                        <Text style={[
+                          styles.dateNumber,
+                          isDarkMode && styles.dateNumberDark,
+                          language === 'ar' && styles.arabicDateNumber
+                        ]}>
+                          {language === 'ar' 
+                            ? convertToArabicNumbers(hijriDate.day)
+                            : hijriDate.day}
+                        </Text>
+                        <View style={styles.dateDetails}>
+                          <Text style={[
+                            styles.monthYear,
+                            isDarkMode && styles.monthYearDark,
+                            language === 'ar' && styles.arabicMonthYear
+                          ]}>
+                            {hijriDate.month}
+                          </Text>
+                          <Text style={[
+                            styles.weekday,
+                            isDarkMode && styles.weekdayDark,
+                            language === 'ar' && styles.arabicWeekday
+                          ]}>
+                            {language === 'ar' 
+                              ? convertToArabicNumbers(hijriDate.year)
+                              : hijriDate.year}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <ActivityIndicator size="small" color={themeColors.activeTabColor} />
+                    )}
+                  </View>
+                </View>
+              </View>
+              
               {nextPrayer && (
                 <LinearGradient
                   colors={getPrayerGradient(nextPrayer, isDarkMode)}
@@ -859,21 +897,21 @@ const styles = StyleSheet.create({
   backgroundImage: {
     opacity: 1, 
     width: '100%', 
-    height: '100%', 
+    height: '100%',
   },
   backgroundImageDark: {
-    opacity: 0.5,
+    opacity: 0.1,
   },
   container: {
     flex: 1,
     paddingHorizontal: '5%',
-    paddingVertical: '2%',
+    paddingVertical: '5%',
     justifyContent: 'center',
   },
   header: {
     alignItems: 'center',
-    paddingVertical: SCREEN_HEIGHT < 700 ? '1%' : (ASPECT_RATIO > 1.6 ? '4%' : '2%'),
-    marginTop: SCREEN_HEIGHT < 700 ? '1%' : (isTablet ? '1%' : '2%'),
+    paddingVertical: SCREEN_HEIGHT < 700 ? '2%' : '3%',
+    marginTop: Platform.OS === 'ios' ? 40 : 20,
     width: '100%',
   },
   title: {
@@ -889,22 +927,43 @@ const styles = StyleSheet.create({
   locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: '2%',
+    marginTop: '1%',
     flexWrap: 'wrap',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  locationContainerDark: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#000',
+    elevation: 4,
   },
   subtitle: {
     fontSize: isTablet 
       ? Math.min(24, SCREEN_WIDTH * 0.035)
       : Math.min(20, SCREEN_WIDTH * 0.05),
     marginLeft: 5,
+    color: '#006400',
+    fontWeight: '600',
+  },
+  subtitleDark: {
+    color: '#4CAF50',
   },
   date: {
     fontSize: isTablet 
       ? Math.min(22, SCREEN_WIDTH * 0.04)
       : Math.min(18, SCREEN_WIDTH * 0.055),
     fontWeight: 'bold',
-    marginTop: isTablet ? '1%' : '2%',
+    marginTop: isTablet ? '2%' : '3%',
     textAlign: 'center',
   },
   countdown: {
@@ -918,18 +977,18 @@ const styles = StyleSheet.create({
   scrollView: {
     width: '100%',
     maxHeight: SCREEN_HEIGHT < 700 
-      ? SCREEN_HEIGHT * 0.45 
+      ? SCREEN_HEIGHT * 0.40 
       : (ASPECT_RATIO > 1.6 
-        ? SCREEN_HEIGHT * 0.65 
-        : SCREEN_HEIGHT * 0.55),
-    marginTop: SCREEN_HEIGHT < 700 ? 40 : 20,
+        ? SCREEN_HEIGHT * 0.60 
+        : SCREEN_HEIGHT * 0.50),
+    marginTop: SCREEN_HEIGHT < 700 ? 25 : 15,
   },
   prayerItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: isTablet ? '2%' : '3%',
-    marginBottom: isTablet ? '1%' : '2%',
+    padding: isTablet ? '1.5%' : '2.5%',
+    marginBottom: isTablet ? '0.8%' : '1.5%',
     borderRadius: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     minHeight: isTablet 
@@ -1039,9 +1098,12 @@ const styles = StyleSheet.create({
   },
   arabicPrayerTime: {
     fontFamily: 'Scheherazade',
-    fontSize: Math.min(20, Math.round(Dimensions.get('window').width * 0.05)),
-    lineHeight: Math.min(28, Math.round(Dimensions.get('window').width * 0.07)),
-    fontWeight: 'bold',
+    fontSize: SCREEN_HEIGHT < 700 
+      ? Math.min(24, SCREEN_WIDTH * 0.06)  // Increased from 18 to 24
+      : Math.min(26, SCREEN_WIDTH * 0.065), // Increased from 20 to 26
+    marginLeft: 10,
+    marginRight: 0,
+    fontWeight: '600',
   },
   arabicCountdown: {
     fontFamily: 'Scheherazade',
@@ -1053,7 +1115,7 @@ const styles = StyleSheet.create({
     fontSize: isTablet 
       ? Math.min(22, SCREEN_WIDTH * 0.04)
       : Math.min(18, SCREEN_WIDTH * 0.055),
-    marginTop: '1%',
+    marginTop: '2%',
     textAlign: 'center',
     opacity: 0.9,
   },
@@ -1076,8 +1138,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 2,
-    marginBottom: SCREEN_HEIGHT < 700 ? 10 : (ASPECT_RATIO > 1.6 ? -50 : -30),
-    marginTop: SCREEN_HEIGHT < 700 ? 5 : (isTablet ? 15 : 10),
+    marginBottom: SCREEN_HEIGHT < 700 ? 10 : (ASPECT_RATIO > 1.6 ? -30 : -15),
+    marginTop: SCREEN_HEIGHT < 700 ? 8 : (isTablet ? 15 : 10),
   },
   countdownTitle: {
     color: '#ffffff',
@@ -1087,12 +1149,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     marginBottom: isTablet ? 10 : 8,
+    width: '100%',
   },
   timeBoxesContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 0,
+    width: '100%',
   },
   timeBox: {
     alignItems: 'center',
@@ -1121,14 +1185,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginHorizontal: SCREEN_HEIGHT < 700 ? 4 : (isTablet ? 10 : 6),
   },
-  countdownContainerRTL: {
-    flexDirection: 'row-reverse',
-  },
   countdownTitleRTL: {
     fontFamily: 'Scheherazade',
     fontSize: isTablet 
       ? Math.min(24, SCREEN_WIDTH * 0.04)
       : Math.min(20, SCREEN_WIDTH * 0.05),
+    textAlign: 'center',
+    width: '100%',
   },
   timeBoxLabelRTL: {
     fontFamily: 'Scheherazade',
@@ -1148,10 +1211,11 @@ const styles = StyleSheet.create({
   arabicPrayerTime: {
     fontFamily: 'Scheherazade',
     fontSize: SCREEN_HEIGHT < 700 
-      ? Math.min(18, SCREEN_WIDTH * 0.045)
-      : Math.min(20, SCREEN_WIDTH * 0.05),
+      ? Math.min(24, SCREEN_WIDTH * 0.06)  // Increased from 18 to 24
+      : Math.min(26, SCREEN_WIDTH * 0.065), // Increased from 20 to 26
     marginLeft: 10,
     marginRight: 0,
+    fontWeight: '600',
   },
   additionalTime: {
     fontSize: SCREEN_HEIGHT < 700 
@@ -1166,9 +1230,132 @@ const styles = StyleSheet.create({
   arabicAdditionalTime: {
     fontFamily: 'Scheherazade',
     fontSize: SCREEN_HEIGHT < 700 
-      ? Math.min(14, SCREEN_WIDTH * 0.035)
-      : Math.min(16, SCREEN_WIDTH * 0.04),
+      ? Math.min(20, SCREEN_WIDTH * 0.05)  // Increased from 14 to 20
+      : Math.min(22, SCREEN_WIDTH * 0.055), // Increased from 16 to 22
     textAlign: 'right',
+  },
+  dateCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 10,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    marginTop: 5,
+  },
+  dateCardDark: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dateColumn: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  dateMainContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  dateDetails: {
+    marginLeft: 8,
+    justifyContent: 'center',
+    maxWidth: '70%',
+    marginTop: 2,
+  },
+  dateDivider: {
+    width: 1,
+    height: '80%',
+    backgroundColor: '#4CAF50',
+    opacity: 0.5,
+    marginHorizontal: 10,
+  },
+  dateNumber: {
+    fontSize: isTablet ? 44 : 38,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    lineHeight: isTablet ? 50 : 44,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
+  dateNumberDark: {
+    color: '#4CAF50',
+  },
+  monthYear: {
+    fontSize: isTablet ? 16 : 14,
+    color: '#666',
+    fontWeight: '500',
+    maxWidth: '100%',
+  },
+  monthYearDark: {
+    color: '#fff',
+  },
+  weekday: {
+    fontSize: isTablet ? 14 : 12,
+    color: '#888',
+    marginTop: 2,
+    maxWidth: '100%',
+  },
+  weekdayDark: {
+    color: '#aaa',
+  },
+  locationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  locationButtonDark: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+  },
+  locationText: {
+    fontSize: isTablet ? 18 : 16,
+    color: '#006400',
+    marginLeft: 5,
+    fontWeight: '500',
+  },
+  locationTextDark: {
+    color: '#4CAF50',
+  },
+  arabicDateNumber: {
+    fontFamily: 'Scheherazade',
+    fontSize: isTablet ? 44 : 38,
+    lineHeight: isTablet ? 50 : 44,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
+  arabicMonthYear: {
+    fontFamily: 'Scheherazade',
+    fontSize: isTablet ? 20 : 18,
+  },
+  arabicWeekday: {
+    fontFamily: 'Scheherazade',
+    fontSize: isTablet ? 18 : 16,
+  },
+  arabicLocationText: {
+    fontFamily: 'Scheherazade',
+    fontSize: isTablet ? 22 : 20,
+    marginRight: 5,
+    marginLeft: 0,
   },
 });
 

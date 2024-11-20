@@ -1,4 +1,4 @@
-package com.omer310.TasbeehApp
+package com.manaratalmuslim
 
 import android.os.Build
 import android.os.Bundle

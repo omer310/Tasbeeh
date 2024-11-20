@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Switch, TouchableOpacity, Modal, FlatList, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Switch, TouchableOpacity, Modal, FlatList, TextInput, ActivityIndicator, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,6 +8,17 @@ import axios from 'axios';
 import { countries } from './countries';
 import AdhanPreferencesModal from './AdhanPreferencesModal';
 
+const madhhabSettings = [
+  { id: 1, name: 'Shafi, Maliki, Hanbali' },
+  { id: 2, name: 'Hanafi' }
+];
+
+const adjustmentMethods = [
+  { id: 1, name: 'No adjustment' },
+  { id: 2, name: 'Middle of night' },
+  { id: 3, name: 'One-seventh of night' },
+  { id: 4, name: 'Angle-based' }
+];
 
 const calculationMethods = [
   { id: 1, name: 'University of Islamic Sciences, Karachi', countries: ['PK', 'AF', 'BD', 'IN'] },
@@ -30,7 +41,7 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
   const [showImsak, setShowImsak] = useState(false);
   const [autoDetectLocation, setAutoDetectLocation] = useState(true);
   const [automaticSettings, setAutomaticSettings] = useState(true);
-  const [location, setLocation] = useState('United States');
+  const [location, setLocation] = useState('');
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [calculationMethod, setCalculationMethod] = useState('');
   const [calculationMethodId, setCalculationMethodId] = useState(3); // Default to Muslim World League
@@ -43,10 +54,24 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
   const [selectedPrayer, setSelectedPrayer] = useState(null);
   const [isAdhanModalVisible, setIsAdhanModalVisible] = useState(false);
   const [prayerTimes, setPrayerTimes] = useState(null);
+  const [madhhabMethod, setMadhhabMethod] = useState(1);
+  const [adjustmentMethod, setAdjustmentMethod] = useState(1);
+  const [fajrAngle, setFajrAngle] = useState('18');
+  const [ishaAngle, setIshaAngle] = useState('17');
+  const [showManualSettings, setShowManualSettings] = useState(false);
+  const [showCalculationMethodPicker, setShowCalculationMethodPicker] = useState(false);
 
   useEffect(() => {
     loadSettings();
+    handleInitialLocation();
   }, []);
+
+  const handleInitialLocation = async () => {
+    const savedLocation = await AsyncStorage.getItem('location');
+    if (!savedLocation) {
+      handleAutoDetectChange(true);
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -62,8 +87,8 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
       const savedCountry = await AsyncStorage.getItem('country');
 
       setShowImsak(savedShowImsak === 'true');
-      setAutoDetectLocation(savedAutoDetect === 'true');
-      setAutomaticSettings(savedAutoSettings === 'true');
+      setAutoDetectLocation(savedAutoDetect !== 'false');
+      setAutomaticSettings(savedAutoSettings !== 'false');
       if (savedLocation) setLocation(savedLocation);
       if (savedMethod) setCalculationMethod(savedMethod);
       if (savedMethodId) setCalculationMethodId(parseInt(savedMethodId));
@@ -88,6 +113,10 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
       await AsyncStorage.setItem('longitude', longitude ? longitude.toString() : '');
       await AsyncStorage.setItem('city', city);
       await AsyncStorage.setItem('country', country);
+      await AsyncStorage.setItem('madhhabMethod', madhhabMethod.toString());
+      await AsyncStorage.setItem('adjustmentMethod', adjustmentMethod.toString());
+      await AsyncStorage.setItem('fajrAngle', fajrAngle);
+      await AsyncStorage.setItem('ishaAngle', ishaAngle);
 
       onSettingsChange({
         showImsak,
@@ -99,7 +128,11 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
         latitude,
         longitude,
         city,
-        country
+        country,
+        madhhabMethod,
+        adjustmentMethod,
+        fajrAngle,
+        ishaAngle
       });
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -149,11 +182,27 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
           const countryCode = countries.find(c => c.name === newCountry)?.code;
           setCity(newCity);
           setCountry(newCountry);
-          setLocation(`${newCity}, ${newCountry}`);
+          const newLocation = newCity ? `${newCity}, ${newCountry}` : newCountry;
+          setLocation(newLocation);
+          
+          await AsyncStorage.setItem('location', newLocation);
           
           const method = getCalculationMethod(countryCode);
           setCalculationMethodId(method.id);
           setCalculationMethod(method.name);
+
+          onSettingsChange({
+            showImsak,
+            autoDetectLocation: true,
+            automaticSettings: true,
+            location: newLocation,
+            calculationMethod: method.name,
+            calculationMethodId: method.id,
+            latitude,
+            longitude,
+            city: newCity,
+            country: newCountry
+          });
         }
       } catch (error) {
         console.error('Error in auto-detect location:', error);
@@ -213,6 +262,29 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
     </TouchableOpacity>
   );
 
+  const handleAutomaticSettingsChange = (value) => {
+    setAutomaticSettings(value);
+    setShowManualSettings(!value);
+    
+    if (value && autoDetectLocation) {
+      handleAutoDetectChange(true);
+    }
+  };
+
+  const handleCalculationMethodSelect = (method) => {
+    setCalculationMethod(method.name);
+    setCalculationMethodId(method.id);
+    setShowCalculationMethodPicker(false);
+    
+    if (!automaticSettings) {
+      onSettingsChange({
+        ...settings,
+        calculationMethod: method.name,
+        calculationMethodId: method.id,
+      });
+    }
+  };
+
   return (
     <Modal
       animationType="slide"
@@ -231,50 +303,158 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
           }}>
             <Ionicons name="arrow-back" size={24} color={themeColors.textColor} />
           </TouchableOpacity>
-          <Text style={[styles.title, { color: themeColors.textColor }]}>Prayer Times</Text>
+          <Text style={[styles.title, { color: themeColors.textColor }]}>Prayer Times Settings</Text>
         </View>
 
-        <View style={styles.settingItem}>
-          <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>Show Imsak in Prayer Times page</Text>
-          <Switch
-            value={showImsak}
-            onValueChange={setShowImsak}
-            trackColor={{ false: "#767577", true: themeColors.activeTabColor }}
-            thumbColor={showImsak ? "#f4f3f4" : "#f4f3f4"}
-          />
-        </View>
-
-        <Text style={[styles.sectionTitle, { color: themeColors.activeTabColor }]}>Prayer Time Calculation</Text>
-
-        <TouchableOpacity style={styles.settingItem} onPress={() => setShowLocationPicker(true)}>
-          <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>Location</Text>
-          <Text style={[styles.settingValue, { color: themeColors.secondaryTextColor }]}>{location}</Text>
-        </TouchableOpacity>
-
-        <View style={styles.settingItem}>
-          <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>Auto-detect Location</Text>
-          <Switch
-            value={autoDetectLocation}
-            onValueChange={handleAutoDetectChange}
-            trackColor={{ false: "#767577", true: themeColors.activeTabColor }}
-            thumbColor={autoDetectLocation ? "#f4f3f4" : "#f4f3f4"}
-          />
-        </View>
-
-        <View style={styles.settingItem}>
-          <View>
-            <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>Automatic settings</Text>
-            <Text style={[styles.settingValue, { color: themeColors.secondaryTextColor }]}>
-              {calculationMethod}
-            </Text>
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          <View style={styles.settingItem}>
+            <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>Show Imsak in Prayer Times page</Text>
+            <Switch
+              value={showImsak}
+              onValueChange={setShowImsak}
+              trackColor={{ false: "#767577", true: themeColors.activeTabColor }}
+              thumbColor={showImsak ? "#f4f3f4" : "#f4f3f4"}
+            />
           </View>
-          <Switch
-            value={automaticSettings}
-            onValueChange={setAutomaticSettings}
-            trackColor={{ false: "#767577", true: themeColors.activeTabColor }}
-            thumbColor={automaticSettings ? "#f4f3f4" : "#f4f3f4"}
-          />
-        </View>
+
+          <Text style={[styles.sectionTitle, { color: themeColors.activeTabColor }]}>Prayer Time Calculation</Text>
+
+          <TouchableOpacity style={styles.settingItem} onPress={() => setShowLocationPicker(true)}>
+            <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>Location</Text>
+            <Text style={[styles.settingValue, { color: themeColors.secondaryTextColor }]}>{location}</Text>
+          </TouchableOpacity>
+
+          <View style={styles.settingItem}>
+            <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>Auto-detect Location</Text>
+            <Switch
+              value={autoDetectLocation}
+              onValueChange={handleAutoDetectChange}
+              trackColor={{ false: "#767577", true: themeColors.activeTabColor }}
+              thumbColor={autoDetectLocation ? "#f4f3f4" : "#f4f3f4"}
+            />
+          </View>
+
+          <View style={styles.settingItem}>
+            <View>
+              <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>Automatic settings</Text>
+              <Text style={[styles.settingValue, { color: themeColors.secondaryTextColor }]}>
+                {calculationMethod}
+              </Text>
+            </View>
+            <Switch
+              value={automaticSettings}
+              onValueChange={handleAutomaticSettingsChange}
+              trackColor={{ false: "#767577", true: themeColors.activeTabColor }}
+              thumbColor={automaticSettings ? "#f4f3f4" : "#f4f3f4"}
+            />
+          </View>
+
+          {!automaticSettings && (
+            <View style={styles.manualSettingsContainer}>
+              <Text style={[styles.sectionTitle, { color: themeColors.activeTabColor }]}>
+                Manual Settings
+              </Text>
+
+              <TouchableOpacity 
+                style={styles.settingItem}
+                onPress={() => setShowCalculationMethodPicker(true)}
+              >
+                <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>
+                  Calculation Method
+                </Text>
+                <Text style={[styles.settingValue, { color: themeColors.secondaryTextColor }]}>
+                  {calculationMethod}
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.settingItem}>
+                <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>
+                  Madhab
+                </Text>
+                <View style={styles.pickerContainer}>
+                  {madhhabSettings.map((madhab) => (
+                    <TouchableOpacity
+                      key={madhab.id}
+                      style={[
+                        styles.pickerOption,
+                        madhhabMethod === madhab.id && styles.pickerOptionSelected,
+                        { borderColor: themeColors.activeTabColor }
+                      ]}
+                      onPress={() => setMadhhabMethod(madhab.id)}
+                    >
+                      <Text style={[
+                        styles.pickerOptionText,
+                        madhhabMethod === madhab.id && { color: themeColors.activeTabColor }
+                      ]}>
+                        {madhab.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.settingItem}>
+                <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>
+                  High Latitude Rule
+                </Text>
+                <View style={styles.pickerContainer}>
+                  {adjustmentMethods.map((method) => (
+                    <TouchableOpacity
+                      key={method.id}
+                      style={[
+                        styles.pickerOption,
+                        adjustmentMethod === method.id && styles.pickerOptionSelected,
+                        { borderColor: themeColors.activeTabColor }
+                      ]}
+                      onPress={() => setAdjustmentMethod(method.id)}
+                    >
+                      <Text style={[
+                        styles.pickerOptionText,
+                        adjustmentMethod === method.id && { color: themeColors.activeTabColor }
+                      ]}>
+                        {method.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.settingItem}>
+                <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>
+                  Prayer Angles
+                </Text>
+                <View style={styles.anglesContainer}>
+                  <View style={styles.angleInput}>
+                    <Text style={[styles.angleLabel, { color: themeColors.secondaryTextColor }]}>
+                      Fajr
+                    </Text>
+                    <TextInput
+                      style={[styles.angleTextInput, { color: themeColors.textColor }]}
+                      value={fajrAngle}
+                      onChangeText={setFajrAngle}
+                      keyboardType="numeric"
+                      placeholder="18°"
+                      placeholderTextColor={themeColors.secondaryTextColor}
+                    />
+                  </View>
+                  <View style={styles.angleInput}>
+                    <Text style={[styles.angleLabel, { color: themeColors.secondaryTextColor }]}>
+                      Isha
+                    </Text>
+                    <TextInput
+                      style={[styles.angleTextInput, { color: themeColors.textColor }]}
+                      value={ishaAngle}
+                      onChangeText={setIshaAngle}
+                      keyboardType="numeric"
+                      placeholder="17°"
+                      placeholderTextColor={themeColors.secondaryTextColor}
+                    />
+                  </View>
+                </View>
+              </View>
+            </View>
+          )}
+        </ScrollView>
 
         <Text style={[styles.infoText, { color: themeColors.secondaryTextColor }]}>
           These prayer times have been verified with {location} • {calculationMethod}. More info
@@ -338,6 +518,39 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
             <ActivityIndicator size="large" color={themeColors.activeTabColor} />
           </View>
         )}
+
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={showCalculationMethodPicker}
+          onRequestClose={() => setShowCalculationMethodPicker(false)}
+        >
+          <View style={[styles.pickerModal, { backgroundColor: themeColors.backgroundColor }]}>
+            <View style={styles.pickerHeader}>
+              <TouchableOpacity onPress={() => setShowCalculationMethodPicker(false)}>
+                <Ionicons name="close" size={24} color={themeColors.textColor} />
+              </TouchableOpacity>
+              <Text style={[styles.pickerTitle, { color: themeColors.textColor }]}>Select Calculation Method</Text>
+            </View>
+            <FlatList
+              data={calculationMethods}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.methodItem, { borderBottomColor: themeColors.borderColor }]}
+                  onPress={() => handleCalculationMethodSelect(item)}
+                >
+                  <Text style={[styles.methodName, { color: themeColors.textColor }]}>{item.name}</Text>
+                  {item.countries.length > 0 && (
+                    <Text style={[styles.methodCountries, { color: themeColors.secondaryTextColor }]}>
+                      Used in: {item.countries.join(', ')}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              keyExtractor={(item) => item.id.toString()}
+            />
+          </View>
+        </Modal>
       </View>
     </Modal>
   );
@@ -395,6 +608,8 @@ const styles = StyleSheet.create({
   pickerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
+    flex: 1,
+    textAlign: 'center',
   },
   searchInput: {
     padding: 10,
@@ -452,6 +667,63 @@ const styles = StyleSheet.create({
   prayerTime: {
     fontSize: 18,
     marginRight: 10,
+  },
+  manualSettingsContainer: {
+    marginTop: 20,
+  },
+  pickerContainer: {
+    flexDirection: 'column',
+    marginTop: 10,
+  },
+  pickerOption: {
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginVertical: 5,
+  },
+  pickerOptionSelected: {
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+  },
+  pickerOptionText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  anglesContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  angleInput: {
+    flex: 1,
+    marginHorizontal: 5,
+  },
+  angleLabel: {
+    fontSize: 14,
+    marginBottom: 5,
+  },
+  angleTextInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 8,
+    fontSize: 16,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  methodItem: {
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+  },
+  methodName: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  methodCountries: {
+    fontSize: 12,
+    opacity: 0.7,
   },
 });
 

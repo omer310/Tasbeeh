@@ -34,6 +34,137 @@ const defaultTheme = {
 const INSTRUCTIONS_SHOWN_KEY = 'qibla_instructions_shown';
 const QIBLA_ALIGNMENT_THRESHOLD = 5;
 const NEAR_ALIGNMENT_THRESHOLD = 15;
+const COMPASS_SMOOTHING_FACTOR = 0.1; // Adjust this value between 0.1 and 0.3 for different smoothing levels
+
+// Add this new component near your other component definitions
+const CalibrationOverlay = ({ onStartCalibration, onClose, themeColors, language }) => {
+  return (
+    <BlurView
+      intensity={95}
+      tint="light"
+      style={[styles.calibrationOverlayContainer]}
+    >
+      <View style={styles.calibrationContent}>
+        <MaterialCommunityIcons 
+          name="compass-off" 
+          size={50} 
+          color={themeColors.primaryColor}
+        />
+        
+        <Text style={[styles.calibrationTitle, { color: themeColors.textColor }]}>
+          {translations.calibrationNeeded[language]}
+        </Text>
+        
+        <Text style={[styles.calibrationInstructions, { color: themeColors.textColor }]}>
+          {translations.calibrationMessage[language]}
+        </Text>
+
+        <View style={styles.calibrationButtons}>
+          <TouchableOpacity
+            style={[styles.calibrationButton, { backgroundColor: themeColors.primaryColor }]}
+            onPress={onStartCalibration}
+          >
+            <Text style={styles.calibrationButtonText}>
+              {translations.startCalibration[language]}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.calibrationButtonSecondary]}
+            onPress={onClose}
+          >
+            <Text style={[styles.calibrationButtonTextSecondary, { color: themeColors.textColor }]}>
+              {translations.later[language]}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </BlurView>
+  );
+};
+
+// Add these new translations to your translations object
+const translations = {
+  qiblaDirection: { 
+    en: 'Qibla Direction', 
+    ar: 'اتجاه القبلة' 
+  },
+  calculating: { en: 'Calculating...', ar: 'جاري الحساب...' },
+  facingQibla: { en: 'You are facing the Qibla', ar: 'أنت تواجه القبلة' },
+  turnSlightlyRight: { en: 'Turn slightly to the right', ar: 'انعطف قليلاً إلى اليمين' },
+  turnSlightlyLeft: { en: 'Turn slightly to the left', ar: 'انعطف قليلاً إلى اليسار' },
+  turnRight: { en: 'Turn to the right', ar: 'انعطف إلى اليمين' },
+  turnLeft: { en: 'Turn to the left', ar: 'انعطف إلى اليسار' },
+  compassAccuracy: { en: 'Compass Accuracy', ar: 'دقة البوصلة' },
+  unknown: { en: 'Unknown', ar: 'غير معروف' },
+  calibrationNeeded: { en: 'Compass Calibration Needed', ar: 'يلزم معايرة البوصلة' },
+  calibrationMessage: { 
+    en: 'To calibrate your compass:\n\n1. Move away from electronic devices and metal objects.\n2. Hold your device flat and level.\n3. Move your device in a figure-eight pattern several times.\n4. Rotate your device slowly in all directions.',
+    ar: 'لمعايرة البوصلة:\n\n1. ابتعد عن الأجهزة الإلكترونية والأجسام المعدنية.\n2. امسك جهازك بشكل مستوٍ وأفقي.\n3. حرك جهازك في نمط على شكل رقم 8 عدة مرات.\n4. قم بتدوير جهازك ببطء في جميع الاتجاهات.'
+  },
+  lowAccuracy: { en: 'Low Accuracy', ar: 'دقة منخفضة' },
+  tapToCalibrate: { en: 'Tap to calibrate', ar: 'انقر للمعايرة' },
+  startGuide: {
+    en: 'Start Finding Qibla',
+    ar: 'ابدأ في البحث عن القبلة'
+  },
+  accuracy: {
+    en: 'Accuracy',
+    ar: 'الدقة'
+  },
+  aligned: {
+    en: 'Aligned with Qibla!',
+    ar: 'مه نحو القبلة!'
+  },
+  gettingClose: {
+    en: 'Getting Close...',
+    ar: 'تقترب...'
+  },
+  turnToYourLeft: {
+    en: 'Turn to your left',
+    ar: 'انعطف إلى اليسار'
+  },
+  turnToYourRight: {
+    en: 'Turn to your right',
+    ar: 'انعطف إلى اليمين'
+  },
+  youAreFacingMakkah: {
+    en: "You're facing Makkah",
+    ar: 'أنت تواجه مكة'
+  },
+  startCalibration: {
+    en: 'Start Calibration',
+    ar: 'بدء المعايرة'
+  },
+  later: {
+    en: 'Later',
+    ar: 'لاحقاً'
+  },
+  accuracyLow: {
+    en: 'Compass accuracy is low',
+    ar: 'دقة البوصلة منخفضة'
+  },
+  facingPrefix: {
+    en: "You're facing ",
+    ar: 'أنت تواجه '
+  },
+  makkah: {
+    en: "Makkah",
+    ar: 'مكة'
+  },
+  turnToYour: {
+    en: "Turn to your ",
+    ar: 'انعطف إلى '
+  },
+  right: {
+    en: "right",
+    ar: 'اليمين'
+  },
+  left: {
+    en: "left",
+    ar: 'اليسار'
+  }
+};
 
 export default function QiblaDirection({ themeColors = defaultTheme, language = 'en' }) {
   // State declarations
@@ -47,57 +178,8 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
   const [isQiblaAligned, setIsQiblaAligned] = useState(false);
   const [firstTimeUser, setFirstTimeUser] = useState(true);
   const rotationAnimation = useRef(new Animated.Value(0)).current;
-
-  // Enhanced translations with more context
-  const translations = {
-    qiblaDirection: { 
-      en: 'Qibla Direction', 
-      ar: 'اتجاه القبلة' 
-    },
-    calculating: { en: 'Calculating...', ar: 'جاري الحساب...' },
-    facingQibla: { en: 'You are facing the Qibla', ar: 'أنت تواجه القبلة' },
-    turnSlightlyRight: { en: 'Turn slightly to the right', ar: 'انعطف قليلاً إلى اليمين' },
-    turnSlightlyLeft: { en: 'Turn slightly to the left', ar: 'انعطف قليلاً إلى اليسار' },
-    turnRight: { en: 'Turn to the right', ar: 'انعطف إلى اليمين' },
-    turnLeft: { en: 'Turn to the left', ar: 'انعطف إلى اليسار' },
-    compassAccuracy: { en: 'Compass Accuracy', ar: 'دقة البوصلة' },
-    unknown: { en: 'Unknown', ar: 'غير معروف' },
-    calibrationNeeded: { en: 'Compass Calibration Needed', ar: 'يلزم معايرة البوصلة' },
-    calibrationMessage: { 
-      en: 'To calibrate your compass:\n\n1. Move away from electronic devices and metal objects.\n2. Hold your device flat and level.\n3. Move your device in a figure-eight pattern several times.\n4. Rotate your device slowly in all directions.',
-      ar: 'لمعايرة البوصلة:\n\n1. ابتعد عن الأجهزة الإلكترونية والأجسام المعدنية.\n2. امسك جهازك بشكل مستوٍ وأفقي.\n3. حرك جهازك في نمط على شكل رقم 8 عدة مرات.\n4. قم بتدوير جهازك ببطء في جميع الاتجاهات.'
-    },
-    lowAccuracy: { en: 'Low Accuracy', ar: 'دقة منخفضة' },
-    tapToCalibrate: { en: 'Tap to calibrate', ar: 'انقر للمعايرة' },
-    startGuide: {
-      en: 'Start Finding Qibla',
-      ar: 'ابدأ في البحث عن القبلة'
-    },
-    accuracy: {
-      en: 'Accuracy',
-      ar: 'الدقة'
-    },
-    aligned: {
-      en: 'Aligned with Qibla!',
-      ar: 'متجه نحو القبلة!'
-    },
-    gettingClose: {
-      en: 'Getting Close...',
-      ar: 'تقترب...'
-    },
-    turnToYourLeft: {
-      en: 'Turn to your left',
-      ar: 'انعطف إلى يسارك'
-    },
-    turnToYourRight: {
-      en: 'Turn to your right',
-      ar: 'انعطف إلى يمينك'
-    },
-    youAreFacingMakkah: {
-      en: "You're facing Makkah",
-      ar: 'أنت تواجه مكة'
-    }
-  };
+  const smoothedHeading = useRef(0);
+  const [showCalibrationOverlay, setShowCalibrationOverlay] = useState(false);
 
   const getTranslatedText = (key) => {
     return translations[key][language] || key;
@@ -123,11 +205,28 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
           setCompassHeading(headingValue);
           setHeadingAccuracy(heading.accuracy);
 
+          // Calculate the rotation for the compass image
+          const compassRotation = (360 - headingValue - qiblaDirection + 60) % 360;
+          
+          // Calculate smoothed rotation
+          let delta = compassRotation - smoothedHeading.current;
+          
+          // Handle crossing 360/0 boundary
+          if (delta > 180) delta -= 360;
+          if (delta < -180) delta += 360;
+          
+          smoothedHeading.current += delta * COMPASS_SMOOTHING_FACTOR;
+          
+          // Normalize the smoothed heading to 0-360 range
+          if (smoothedHeading.current >= 360) smoothedHeading.current -= 360;
+          if (smoothedHeading.current < 0) smoothedHeading.current += 360;
+
+          // Update the animation with smoothed value
           Animated.timing(rotationAnimation, {
-            toValue: headingValue,
-            duration: 300,
+            toValue: smoothedHeading.current,
+            duration: 16,
             useNativeDriver: true,
-            easing: Easing.out(Easing.ease),
+            easing: Easing.linear,
           }).start();
         });
       } catch (err) {
@@ -141,26 +240,40 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
         headingSubscription.remove();
       }
     };
-  }, []);
+  }, [qiblaDirection]);
 
-  // Enhanced calibration check
+  // Update the calibration check useEffect
   useEffect(() => {
-    if (headingAccuracy > 15 && !isCalibrating) {
-      showCalibrationAlert();
-    }
-  }, [headingAccuracy]);
+    const checkAccuracy = () => {
+      if (headingAccuracy > 5 || 
+          (qiblaDirection && Math.abs(qiblaDirection - compassHeading) > 180)) {
+        setShowCalibrationOverlay(true);
+      }
+    };
+
+    // Check accuracy after a short delay to allow initial readings
+    const timer = setTimeout(checkAccuracy, 2000);
+
+    return () => clearTimeout(timer);
+  }, [headingAccuracy, qiblaDirection, compassHeading]);
 
   // Enhanced Qibla alignment feedback
   useEffect(() => {
     if (qiblaDirection && compassHeading) {
-      const angleDifference = Math.abs(((qiblaDirection - compassHeading + 540) % 360) - 180);
-      const isAligned = angleDifference < QIBLA_ALIGNMENT_THRESHOLD;
-      const isNearlyAligned = angleDifference < NEAR_ALIGNMENT_THRESHOLD;
+      // Calculate the actual angle difference between current heading and Qibla direction
+      let angleDifference = ((qiblaDirection - compassHeading + 360) % 360);
+      
+      // Normalize the angle difference to -180 to +180 range
+      if (angleDifference > 180) {
+        angleDifference -= 360;
+      }
+      
+      // Check if we're actually facing the Qibla
+      const isAligned = Math.abs(angleDifference) < QIBLA_ALIGNMENT_THRESHOLD;
       
       setIsQiblaAligned(isAligned);
       
       if (isAligned) {
-        // Vibrate in a success pattern when aligned
         Vibration.vibrate([0, 100, 50, 100]);
       }
     }
@@ -181,32 +294,6 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
     } catch (error) {
       console.error('Error checking first-time user:', error);
     }
-  };
-
-  const showCalibrationAlert = () => {
-    Alert.alert(
-      getTranslatedText('calibrationNeeded'),
-      getTranslatedText('calibrationMessage'),
-      [
-        {
-          text: getTranslatedText('startCalibration'),
-          onPress: startCalibration,
-          style: 'default',
-        },
-        {
-          text: getTranslatedText('later'),
-          style: 'cancel',
-        },
-      ]
-    );
-  };
-
-  const startCalibration = () => {
-    setIsCalibrating(true);
-    // Simulate calibration process
-    setTimeout(() => {
-      setIsCalibrating(false);
-    }, 10000);
   };
 
   const fetchQiblaDirection = async (latitude, longitude) => {
@@ -256,7 +343,13 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
           style={[
             styles.compassRotation,
             {
-              transform: [{ rotate: rotation }],
+              transform: [{
+                rotate: rotation.interpolate({
+                  inputRange: [0, 360],
+                  outputRange: ['0deg', '360deg'],
+                  extrapolate: 'clamp'
+                })
+              }],
               width: compassSize,
               height: compassSize,
               borderColor: getCompassRimColor(),
@@ -285,7 +378,7 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
           {headingAccuracy > 15 && (
             <TouchableOpacity 
               style={[styles.calibrateButton, { backgroundColor: themeColors.primaryColor }]}
-              onPress={showCalibrationAlert}
+              onPress={() => setShowCalibrationOverlay(true)}
             >
               <Text style={styles.calibrateText}>
                 {getTranslatedText('tapToCalibrate')}
@@ -310,15 +403,16 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
     const getIndicatorContent = () => {
       if (isQiblaAligned) {
         return {
-          prefix: "You're facing ",
-          highlight: "Makkah",
+          prefix: getTranslatedText('facingPrefix'),
+          highlight: getTranslatedText('makkah'),
         };
       }
       
-      const isRight = angleDifference > 0;
+      const turnDirection = ((qiblaDirection - compassHeading + 360) % 360) > 180 ? "left" : "right";
+      
       return {
-        prefix: "Turn to your ",
-        highlight: isRight ? "right" : "left",
+        prefix: getTranslatedText('turnToYour'),
+        highlight: getTranslatedText(turnDirection),
       };
     };
 
@@ -356,6 +450,22 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
             />
           )}
 
+          {showCalibrationOverlay && (
+            <CalibrationOverlay
+              onStartCalibration={() => {
+                setIsCalibrating(true);
+                setShowCalibrationOverlay(false);
+                // Start calibration process
+                setTimeout(() => {
+                  setIsCalibrating(false);
+                }, 10000);
+              }}
+              onClose={() => setShowCalibrationOverlay(false)}
+              themeColors={themeColors}
+              language={language}
+            />
+          )}
+
           {/* Move DirectionIndicator to the top */}
           <View style={styles.topSection}>
             <DirectionIndicator 
@@ -379,10 +489,7 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
           </View>
 
           <Compass
-            rotation={rotationAnimation.interpolate({
-              inputRange: [0, 360],
-              outputRange: ['360deg', '0deg'],
-            })}
+            rotation={rotationAnimation}  // Pass the Animated.Value directly
           />
         </View>
       </View>
@@ -529,6 +636,68 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
+  },
+  calibrationOverlayContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  calibrationContent: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 20,
+    padding: 24,
+    margin: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  calibrationTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  calibrationInstructions: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  calibrationButtons: {
+    width: '100%',
+    gap: 12,
+  },
+  calibrationButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calibrationButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  calibrationButtonSecondary: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calibrationButtonTextSecondary: {
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
 

@@ -1,84 +1,95 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useDua } from '../contexts/DuaContext';
 
-const MyDuas = ({ 
-  navigation, 
-  isDarkMode, 
-  themeColors, 
-  language, 
-  myDuas, 
-  favorites, 
-  onToggleFavorite, 
-  onAddNote, 
-  onAddToCollection 
-}) => {
+const MyDuas = ({ navigation, isDarkMode, themeColors, language }) => {
+  const { myDuas, favorites, notes, onToggleFavorite } = useDua();
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredDuas, setFilteredDuas] = useState([]);
 
   useEffect(() => {
     if (myDuas && myDuas.length > 0) {
-      const filtered = myDuas.filter(dua => 
-        dua.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        dua.titleAr.includes(searchQuery) ||
-        dua.arabic.includes(searchQuery) ||
-        dua.transliteration.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        dua.translation.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      const filtered = myDuas.filter(dua => {
+        const title = dua.title?.toLowerCase() || '';
+        const titleAr = dua.titleAr || '';
+        const arabic = dua.arabic || '';
+        const transliteration = dua.transliteration?.toLowerCase() || '';
+        const translation = dua.translation?.toLowerCase() || '';
+        const duaNote = notes[dua.id]?.toLowerCase() || '';
+        const query = searchQuery.toLowerCase();
+
+        return (
+          title.includes(query) ||
+          titleAr.includes(searchQuery) ||
+          arabic.includes(searchQuery) ||
+          transliteration.includes(query) ||
+          translation.includes(query) ||
+          duaNote.includes(query)
+        );
+      });
       setFilteredDuas(filtered);
     } else {
       setFilteredDuas([]);
     }
-  }, [searchQuery, myDuas]);
+  }, [searchQuery, myDuas, notes]);
 
-  const renderDuaItem = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.duaItem,
-        { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#FFFFFF' }
-      ]}
-      onPress={() => navigation.navigate('DuaDetails', { 
-        dua: item, 
-        category: { title: 'My Duas', titleAr: 'أدعيتي' },
-        index: myDuas.indexOf(item),
-        isDarkMode, 
-        themeColors, 
-        language,
-        onToggleFavorite: (dua) => onToggleFavorite(dua),
-        onAddNote: (duaId, note) => onAddNote(duaId, note),
-        onAddToCollection: (dua) => onAddToCollection(dua),
-        isFavorite: favorites[item.id] || false
-      })}
-    >
-      <View style={styles.duaItemContent}>
-        <View style={styles.duaTitleContainer}>
-          <Text style={[styles.duaTitle, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}>
-            {language === 'ar' ? item.titleAr : item.title}
-          </Text>
-          {item.parentCategory && (
-            <Text style={[styles.parentCategory, { color: isDarkMode ? '#BBBBBB' : themeColors.secondaryTextColor }]}>
-              {language === 'ar' ? item.parentCategory.titleAr : item.parentCategory.title}
+  const renderDuaItem = ({ item, index }) => {
+    if (!item || !item.id) return null;
+
+    const duaNote = notes[item.id] || item.note;
+    const title = language === 'ar' ? (item.titleAr || '') : (item.title || '');
+    const parentCategory = item.parentCategory ? 
+      (language === 'ar' ? item.parentCategory.titleAr : item.parentCategory.title) : '';
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.duaItem,
+          { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#FFFFFF' }
+        ]}
+        onPress={() => navigation.navigate('DuaDetails', { 
+          dua: item, 
+          category: null,
+          index: index,
+          isDarkMode, 
+          themeColors, 
+          language,
+          isFavorite: favorites[item.id] || false
+        })}
+      >
+        <View style={styles.duaItemContent}>
+          <View style={styles.duaTitleContainer}>
+            <Text style={[styles.duaTitle, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}>
+              {title}
             </Text>
-          )}
+            {parentCategory && (
+              <Text style={[styles.parentCategory, { color: isDarkMode ? '#BBBBBB' : themeColors.secondaryTextColor }]}>
+                {parentCategory}
+              </Text>
+            )}
+          </View>
+          <TouchableOpacity onPress={() => onToggleFavorite(item)}>
+            <Ionicons 
+              name={favorites[item.id] ? "star" : "star-outline"} 
+              size={24} 
+              color={favorites[item.id] ? "#FFD700" : (isDarkMode ? '#FFFFFF' : themeColors.textColor)} 
+            />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={() => onToggleFavorite(item)}>
-          <Ionicons 
-            name={favorites[item.id] ? "star" : "star-outline"} 
-            size={24} 
-            color={favorites[item.id] ? "#FFD700" : (isDarkMode ? '#FFFFFF' : themeColors.textColor)} 
-          />
-        </TouchableOpacity>
-      </View>
-      {item.note && (
-        <Text style={[styles.duaNote, { color: isDarkMode ? '#BBBBBB' : themeColors.secondaryTextColor }]}>
-          Note: {item.note}
-        </Text>
-      )}
-    </TouchableOpacity>
-  );
+        {duaNote && (
+          <Text style={[styles.duaNote, { color: isDarkMode ? '#BBBBBB' : themeColors.secondaryTextColor }]}>
+            Note: {duaNote}
+          </Text>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <View style={styles.container}>
+    <GestureHandlerRootView style={styles.container}>
       <View style={styles.searchContainer}>
         <TextInput
           style={[styles.searchInput, { 
@@ -94,14 +105,14 @@ const MyDuas = ({
       <FlatList
         data={filteredDuas}
         renderItem={renderDuaItem}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item) => item?.id?.toString() || Math.random().toString()}
         ListEmptyComponent={
           <Text style={[styles.emptyText, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}>
             No duas added yet. Add duas by favoriting them!
           </Text>
         }
       />
-    </View>
+    </GestureHandlerRootView>
   );
 };
 

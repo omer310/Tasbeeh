@@ -40,36 +40,6 @@ const Settings = ({ darkMode, toggleDarkMode, theme, changeTheme, themeColors, s
           'brightness-6'
         )}
 
-        {renderSettingItem('Theme', 'السمة',
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={theme}
-              style={[styles.picker, { color: themeColors.textColor }]}
-              onValueChange={(itemValue) => changeTheme(itemValue)}
-            >
-              <Picker.Item label={language === 'ar' ? 'افتراضي' : 'Default'} value="default" />
-              <Picker.Item label={language === 'ar' ? 'طبيعة' : 'Nature'} value="nature" />
-              <Picker.Item label={language === 'ar' ? 'محيط' : 'Ocean'} value="ocean" />
-            </Picker>
-          </View>,
-          'palette'
-        )}
-
-        {renderSettingItem('Arabic Font', 'الخط العربي',
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={selectedFont}
-              style={[styles.picker, { color: themeColors.textColor }]}
-              onValueChange={(itemValue) => changeFont(itemValue)}
-            >
-              {fontOptions.map((font) => (
-                <Picker.Item key={font} label={font} value={font} />
-              ))}
-            </Picker>
-          </View>,
-          'font-download'
-        )}
-
         {renderSettingItem('Language', 'اللغة',
           <View style={styles.pickerContainer}>
             <Picker
@@ -159,6 +129,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     marginLeft: 10,
+  },
+  versionText: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginTop: 10,
+  },
+  section: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  option: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  optionText: {
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
 
