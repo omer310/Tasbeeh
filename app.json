@@ -39,7 +39,9 @@
         "SCHEDULE_EXACT_ALARM",
         "USE_EXACT_ALARM",
         "RECEIVE_BOOT_COMPLETED",
-        "WAKE_LOCK"
+        "WAKE_LOCK",
+        "FOREGROUND_SERVICE",
+        "SYSTEM_ALERT_WINDOW"
       ],
       "package": "com.manaratalmuslim",
       "useNextNotificationsApi": true,
@@ -57,12 +59,21 @@
         {
           "icon": "./assets/icon1.png",
           "color": "#ffffff",
-          "sounds": [
+          "sounds": [ 
             "./assets/adhan.mp3",
             "./assets/madinah_adhan.mp3",
             "./assets/makkah_adhan.mp3",
             "./assets/long_beep.mp3"
-          ]
+          ],
+          "mode": "production",
+          "androidMode": "default",
+          "androidCollapsedTitle": "Prayer Times",
+          "androidBadgeIconType": "large",
+          "androidImportance": "max",
+          "androidShowWhen": true,
+          "androidAllowWhileIdle": true,
+          "androidAllowInForeground": true,
+          "androidPriority": "max"
         }
       ],
       [
@@ -74,7 +85,8 @@
       [
         "expo-background-fetch",
         {
-          "backgroundFetch": true
+          "backgroundFetch": true,
+          "startOnBoot": true
         }
       ],
       [

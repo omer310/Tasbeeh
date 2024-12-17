@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, Dimensions, SafeAreaView, ActivityIndicator, TextInput, ScrollView, Platform, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, Dimensions, SafeAreaView, ActivityIndicator, TextInput, ScrollView, Platform, TouchableWithoutFeedback, StatusBar, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import quranImages from './quranImages';
@@ -14,7 +14,10 @@ import EnglishTranslation from './EnglishTranslation';
 import BookmarkManager from './BookmarkManager';
 import BookmarkList from './BookmarkList';
 
-function QuranReader({ navigation, themeColors }) {
+function QuranReader({ navigation, themeColors, language }) {
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedSurah, setSelectedSurah] = useState(null);
   const [surahs, setSurahs] = useState([]);
@@ -424,6 +427,11 @@ function QuranReader({ navigation, themeColors }) {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={[styles.container, { backgroundColor: themeColors.backgroundColor }]}>
+        <StatusBar
+          barStyle={isDarkMode ? "light-content" : "dark-content"}
+          backgroundColor="transparent"
+          translucent={true}
+        />
         <TouchableOpacity 
           activeOpacity={1} 
           onPress={handleOutsideClick}

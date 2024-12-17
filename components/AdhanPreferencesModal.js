@@ -140,9 +140,16 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPref
     setSelectedAdhan(option.name);
     await savePreferences(option.name, null);
     
-    // Immediately schedule the notification with new preference
+    // Stop any playing sound when changing preference
+    if (sound) {
+      await sound.unloadAsync();
+      setIsPlaying(false);
+      setPlayingAdhan(null);
+    }
+    
+    // Immediately schedule the notification with new preferences
     if (typeof onPreferenceChange === 'function') {
-      onPreferenceChange(prayer, option.name, selectedReminder);
+      onPreferenceChange(prayer, option.name);
     }
   };
 

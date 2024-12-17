@@ -191,10 +191,38 @@ const requestNotificationPermissions = async () => {
   }
 };
 
+const checkScheduledNotifications = async () => {
+  try {
+    const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
+    console.log('Currently scheduled notifications:', scheduledNotifications.length);
+    
+    // If no notifications are scheduled, try to reschedule them
+    if (scheduledNotifications.length === 0) {
+      const prayerTimes = await AsyncStorage.getItem('lastPrayerTimes');
+      const adhanPreferences = await AsyncStorage.getItem('adhanPreferences');
+      const playAdhan = await AsyncStorage.getItem('playAdhan');
+      
+      if (prayerTimes && adhanPreferences) {
+        await schedulePrayerNotifications(
+          JSON.parse(prayerTimes),
+          JSON.parse(adhanPreferences),
+          playAdhan === 'true'
+        );
+      }
+    }
+    
+    return scheduledNotifications;
+  } catch (error) {
+    console.error('Error checking scheduled notifications:', error);
+    return [];
+  }
+};
+
 export {
   schedulePrayerNotifications,
   cancelAllScheduledNotifications,
   requestNotificationPermissions,
   playAdhanSound,
   BACKGROUND_NOTIFICATION_TASK,
+  checkScheduledNotifications,
 }; 

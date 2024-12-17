@@ -7,16 +7,41 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   schedulePrayerNotifications,
   requestNotificationPermissions,
-  BACKGROUND_NOTIFICATION_TASK 
+  BACKGROUND_NOTIFICATION_TASK,
+  checkScheduledNotifications,
+  stopAdhan,
 } from '../services/NotificationService';
 import PrayerTimeSettings from './PrayerTimeSettings';
 import AdhanPreferenceModal from './AdhanPreferencesModal';
 import { format } from 'date-fns';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Notifications from 'expo-notifications';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const ASPECT_RATIO = SCREEN_HEIGHT / SCREEN_WIDTH;
 const isTablet = SCREEN_WIDTH >= 768; // Common tablet breakpoint
+
+const CACHE_KEY_PREFIX = 'prayerTimes_';
+const CACHE_DAYS = 3; // Cache prayer times for 3 days
+
+const formatDate = (date) => format(date, 'yyyy-MM-dd');
+
+const getCacheKey = (date) => `${CACHE_KEY_PREFIX}${formatDate(date)}`;
+
+const getPrayerTimesForDate = async (date, latitude, longitude, method) => {
+  try {
+    const response = await axios.get(`https://api.aladhan.com/v1/timings/${formatDate(date)}`, {
+      params: {
+        latitude,
+        longitude,
+        method,
+      },
+    });
+    return response.data.data.timings;
+  } catch (error) {
+    throw error;
+  }
+};
 
 const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync, isDarkMode }) => {
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +69,7 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
   const [selectedPrayer, setSelectedPrayer] = useState(null);
   const [dimensions, setDimensions] = useState(Dimensions.get('window'));
   const [hijriDate, setHijriDate] = useState(null);
+  const [cachedPrayerTimes, setCachedPrayerTimes] = useState({});
 
   // Add translations
   const translations = {
@@ -62,7 +88,7 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     playAdhan: { en: 'Play Adhan', ar: 'تشغيل الأذان' },
     midnight: { en: 'Midnight', ar: 'منتصف الليل' },
     lastTime: { en: 'Last time', ar: 'آخر وقت' },
-    lastTimeIsha: { en: 'Last time to pray Isha ends in', ar: 'آخر وقت لصلاة العشاء ينتهي في' },
+    lastTimeIsha: { en: 'Last time to pray Isha ends in', ar: 'آخر وقت لصلاة الشاء ينتهي في' },
     fajrEnds: { en: 'Fajr ends in', ar: 'ينتهي وقت الفجر في' },
     am: { en: 'AM', ar: 'ص' },
     pm: { en: 'PM', ar: 'م' },
@@ -144,7 +170,7 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
         }
       }
     } catch (error) {
-      console.error('Error fetching Hijri date:', error);
+      setError('Failed to fetch Hijri date');
     }
   };
 
@@ -157,14 +183,10 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
       try {
         setIsLoading(true);
         
-        // Request notification permissions first
         await requestNotificationPermissions();
         
-        // First check for saved location
         const savedLocation = await AsyncStorage.getItem('location');
-        
         if (savedLocation) {
-          // If we have a saved location, use it immediately
           setSettings(prev => ({
             ...prev,
             location: savedLocation,
@@ -173,54 +195,11 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
           }));
         }
         
-        // Then try to get current location
-        const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
-        if (locationStatus === 'granted') {
-          const locationResult = await Location.getCurrentPositionAsync({});
-          const { latitude, longitude } = locationResult.coords;
-          
-          let geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
-          if (geocode[0]) {
-            const newCity = geocode[0].city || geocode[0].subregion || '';
-            const newCountry = geocode[0].country || '';
-            const newLocation = newCity ? `${newCity}, ${newCountry}` : newCountry;
-            
-            // Update settings state immediately
-            setSettings(prev => ({
-              ...prev,
-              location: newLocation,
-              autoDetectLocation: true,
-              automaticSettings: true,
-              latitude,
-              longitude,
-            }));
-
-            // Save to AsyncStorage
-            await AsyncStorage.multiSet([
-              ['location', newLocation],
-              ['autoDetectLocation', 'true'],
-              ['automaticSettings', 'true'],
-              ['latitude', latitude.toString()],
-              ['longitude', longitude.toString()],
-            ]);
-
-            // Fetch prayer times with the new location
-            await fetchPrayerTimes(latitude, longitude);
-          }
-        }
-
-        // Load other settings and prayer times
-        await loadSettings();
+        // Load cached prayer times first
         await loadCachedPrayerTimes();
         
-        // After loading prayer times and settings
-        if (prayerTimesRef.current) {
-          await schedulePrayerNotifications(
-            prayerTimesRef.current,
-            adhanPreferences,
-            playAdhan
-          );
-        }
+        // Then update the cache in the background
+        updatePrayerTimesCache();
         
       } catch (error) {
         console.error('Error in setup:', error);
@@ -265,7 +244,7 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
         }));
       }
     } catch (error) {
-      console.error('Error loading settings:', error);
+      setError('Failed to load settings');
     }
   };
 
@@ -279,86 +258,36 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
       }
       setAdhanPreferences(loadedPreferences);
     } catch (error) {
-      console.error('Error loading adhan preferences:', error);
+      setError('Failed to load Adhan preferences');
     }
   };
 
   const loadCachedPrayerTimes = async () => {
     try {
-      const today = format(new Date(), 'yyyy-MM-dd');
-      const cachedData = await AsyncStorage.getItem(`prayerTimes_${today}`);
-      const currentLocation = await AsyncStorage.getItem('location');
-      
-      if (cachedData) {
-        const { prayerTimes } = JSON.parse(cachedData);
-        prayerTimesRef.current = prayerTimes;
+      const cached = await AsyncStorage.getItem('prayerTimesCache');
+      if (cached) {
+        const parsedCache = JSON.parse(cached);
+        setCachedPrayerTimes(parsedCache);
         
-        if (currentLocation) {
-          setSettings(prev => ({ ...prev, location: currentLocation }));
+        const today = formatDate(new Date());
+        if (parsedCache[today]) {
+          prayerTimesRef.current = parsedCache[today];
+          updateNextPrayerAndCountdown();
+          return true;
         }
-        
-        updateNextPrayerAndCountdown();
-      } else {
-        await fetchPrayerTimes();
       }
+      return false;
     } catch (error) {
-      console.error('Error loading cached prayer times:', error);
-      setError('Failed to load prayer times. Please try again.');
+      setError('Failed to load cached prayer times');
+      return false;
     }
   };
 
   const fetchPrayerTimes = async (lat = null, lng = null) => {
-    setIsLoading(true);
-    setError(null);
     try {
-      let coords;
-      if (lat && lng) {
-        coords = { latitude: lat, longitude: lng };
-      } else if (settings.autoDetectLocation) {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          throw new Error('Permission to access location was denied');
-        }
-        const locationResult = await Location.getCurrentPositionAsync({});
-        coords = locationResult.coords;
-        
-        // Update location name if we're getting new coordinates
-        let geocode = await Location.reverseGeocodeAsync(coords);
-        if (geocode[0]) {
-          const newCity = geocode[0].city || geocode[0].subregion || '';
-          const newCountry = geocode[0].country || '';
-          const newLocation = newCity ? `${newCity}, ${newCountry}` : newCountry;
-          
-          setSettings(prev => ({
-            ...prev,
-            location: newLocation
-          }));
-          
-          await AsyncStorage.setItem('location', newLocation);
-        }
-      }
-
-      const response = await axios.get(`https://api.aladhan.com/v1/timings`, {
-        params: {
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          method: settings.calculationMethodId,
-        },
-      });
-
-      const newPrayerTimes = response.data.data.timings;
-      prayerTimesRef.current = newPrayerTimes;
-      updateNextPrayerAndCountdown();
-
-      // Cache the prayer times
-      const today = format(new Date(), 'yyyy-MM-dd');
-      await AsyncStorage.setItem(`prayerTimes_${today}`, JSON.stringify({
-        prayerTimes: newPrayerTimes,
-        location: settings.location,
-      }));
-
+      setIsLoading(true);
+      await updatePrayerTimesCache();
     } catch (error) {
-      console.error('Error fetching prayer times:', error);
       setError('Failed to fetch prayer times. Please check your internet connection and try again.');
     } finally {
       setIsLoading(false);
@@ -512,15 +441,15 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
     }
   };
 
-  const getPrayerIconName = (prayer) => {
-    switch (prayer) {
-      case 'Imsak': return 'sunny';
-      case 'Midnight': return 'moon';
-      case 'Lastthird': return 'partly-sunny';
-      case 'Firstthird': return 'partly-sunny';
-      default: return 'prayer-time';
-    }
-  };
+  // const getPrayerIconName = (prayer) => {
+  //   switch (prayer) {
+  //     case 'Imsak': return 'sunny';
+  //     case 'Midnight': return 'moon';
+  //     case 'Lastthird': return 'partly-sunny';
+  //     case 'Firstthird': return 'partly-sunny';
+  //     default: return 'prayer-time';
+  //   }
+  // };
 
   const getPrayerGradient = (prayer, isDarkMode) => {
     const gradients = {
@@ -549,8 +478,8 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
   const handleAdhanPreferenceChange = async (prayer, preference) => {
     const newPreferences = { ...adhanPreferences, [prayer]: preference };
     setAdhanPreferences(newPreferences);
-    await AsyncStorage.setItem(`adhan_preference_${prayer}`, preference);
-    
+    await AsyncStorage.setItem('adhanPreferences', JSON.stringify(newPreferences));
+
     // Reschedule notifications with new preferences
     if (prayerTimesRef.current) {
       await schedulePrayerNotifications(
@@ -681,7 +610,108 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
       reminderIds.push(notificationId);
       await AsyncStorage.setItem('scheduledReminderIds', JSON.stringify(reminderIds));
     } catch (error) {
-      console.error('Error scheduling reminder notification:', error);
+      setError('Failed to schedule reminder notification');
+    }
+  };
+
+  // Also add this useEffect to monitor notification scheduling
+  useEffect(() => {
+    const checkNotifications = async () => {
+      const scheduled = await checkScheduledNotifications();
+    };
+
+    checkNotifications();
+    
+    // Set up an interval to check notifications every hour
+    const interval = setInterval(checkNotifications, 1000 * 60 * 60);
+    return () => clearInterval(interval);
+  }, []);
+
+  const testNotification = async () => {
+    try {
+      const testTime = new Date();
+      testTime.setSeconds(testTime.getSeconds() + 5);
+      
+      const testPrayerTimes = {
+        Fajr: format(testTime, 'HH:mm'),
+        Dhuhr: '12:00',
+        Asr: '15:00',
+        Maghrib: '18:00',
+        Isha: '20:00'
+      };
+
+      await schedulePrayerNotifications(
+        testPrayerTimes,
+        adhanPreferences,
+        playAdhan
+      );
+    } catch (error) {
+      setError('Failed to schedule test notification');
+    }
+  };
+
+  const updatePrayerTimesCache = async () => {
+    try {
+      let coords;
+      if (settings.latitude && settings.longitude) {
+        coords = { latitude: settings.latitude, longitude: settings.longitude };
+      } else {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          throw new Error('Location permission denied');
+        }
+        const location = await Location.getCurrentPositionAsync({});
+        coords = location.coords;
+        
+        let geocode = await Location.reverseGeocodeAsync(coords);
+        if (geocode[0]) {
+          const newCity = geocode[0].city || geocode[0].subregion || '';
+          const newCountry = geocode[0].country || '';
+          const newLocation = newCity ? `${newCity}, ${newCountry}` : newCountry;
+          
+          setSettings(prev => ({
+            ...prev,
+            location: newLocation,
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+          }));
+          
+          await AsyncStorage.multiSet([
+            ['location', newLocation],
+            ['latitude', coords.latitude.toString()],
+            ['longitude', coords.longitude.toString()],
+          ]);
+        }
+      }
+
+      const today = new Date();
+      const newCache = { ...cachedPrayerTimes };
+      
+      for (let i = 0; i < CACHE_DAYS; i++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() + i);
+        const dateStr = formatDate(date);
+        
+        if (!newCache[dateStr]) {
+          const prayerTimes = await getPrayerTimesForDate(
+            date,
+            coords.latitude,
+            coords.longitude,
+            settings.calculationMethodId
+          );
+          newCache[dateStr] = prayerTimes;
+        }
+      }
+
+      setCachedPrayerTimes(newCache);
+      await AsyncStorage.setItem('prayerTimesCache', JSON.stringify(newCache));
+      
+      const todayStr = formatDate(today);
+      prayerTimesRef.current = newCache[todayStr];
+      updateNextPrayerAndCountdown();
+      
+    } catch (error) {
+      setError('Failed to update prayer times cache');
     }
   };
 
@@ -863,10 +893,13 @@ const PrayerTimes = ({ themeColors, language, registerForPushNotificationsAsync,
             >
               {['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'].map(renderPrayerTime)}
               {settings.showImsak && renderPrayerTime('Imsak')}
+              
             </ScrollView>
           </>
         ) : (
-          <Text style={[styles.errorText, { color: themeColors.errorColor }]}>No prayer times available. Please check your settings and try again.</Text>
+          <Text style={[styles.errorText, { color: themeColors.errorColor }]}>
+            No prayer times available. Please check your settings and try again.
+          </Text>
         )}
       </View>
       <PrayerTimeSettings 
@@ -1356,7 +1389,7 @@ const styles = StyleSheet.create({
     fontSize: isTablet ? 22 : 20,
     marginRight: 5,
     marginLeft: 0,
-  },
+  }
 });
 
 export default PrayerTimes;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Image, View, TouchableOpacity, ScrollView, I18nManager, Text, Animated } from 'react-native';
+import { StyleSheet, Image, View, TouchableOpacity, ScrollView, I18nManager, Text, Animated, useColorScheme } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -182,6 +182,9 @@ function CustomTabBar({ state, descriptors, navigation, themeColors }) {
 }
 
 function ScreenWrapper({ children, style, themeColors }) {
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  
   return (
     <SafeAreaView 
       style={[
@@ -191,6 +194,11 @@ function ScreenWrapper({ children, style, themeColors }) {
         style
       ]}
     >
+      <StatusBar
+        barStyle={isDarkMode ? "light-content" : "dark-content"}
+        backgroundColor="transparent"
+        translucent={true}
+      />
       {children}
     </SafeAreaView>
   );
@@ -208,133 +216,136 @@ function MainAppContent({
   changeLanguage 
 }) {
   return (
-    <Tab.Navigator
-      tabBar={props => (
-        <CustomTabBar {...props} themeColors={themeColors} />
-      )}
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconSource;
-          let iconStyle = {
-            width: focused ? size * 1.6 : size,
-            height: focused ? size * 1.4 : size,
-            tintColor: focused ? themeColors.activeTabColor : 'gray',
-            resizeMode: 'contain',
-            marginBottom: 4,
-            marginTop: 6,
-            opacity: focused ? 1 : 0.7
-          };
-
-          if (route.name === 'Prayer Times') {
-            iconSource = require('./assets/prayer-time.png');
-          } else if (route.name === 'Quran') {
-            iconSource = require('./assets/Quran-icon.png');
-            iconStyle = {
-              ...iconStyle,
-              width: focused ? size * 2.5 : size * 1.8,
-              height: focused ? size * 2.5 : size * 1.8,
-              marginTop: 0,
-              marginBottom: 0
+    <>
+      <AppStatusBar darkMode={darkMode} />
+      <Tab.Navigator
+        tabBar={props => (
+          <CustomTabBar {...props} themeColors={themeColors} />
+        )}
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarIcon: ({ focused, color, size }) => {
+            let iconSource;
+            let iconStyle = {
+              width: focused ? size * 1.6 : size,
+              height: focused ? size * 1.4 : size,
+              tintColor: focused ? themeColors.activeTabColor : 'gray',
+              resizeMode: 'contain',
+              marginBottom: 4,
+              marginTop: 6,
+              opacity: focused ? 1 : 0.7
             };
-          } else if (route.name === 'Tasbeeh') {
-            iconSource = require('./assets/Tasbeeh.png');
-          } else if (route.name === 'Qibla') {
-            iconSource = require('./assets/qibla-arrow.png');
-          } else if (route.name === 'Calendar') {
-            iconSource = require('./assets/islamic-calendar.png');
-          } else if (route.name === 'Hadith') {
-            iconSource = require('./assets/Hadith-icon.png');
-          } else if (route.name === 'Duas') {
-            iconSource = require('./assets/Duas-icon.png');
-          } else if (route.name === 'Settings') {
-            iconSource = require('./assets/SettingsFocused.png');
-          }
 
-          return (
-            <Image
-              source={iconSource}
-              style={iconStyle}
-            />
-          );
-        },
-        tabBarActiveTintColor: themeColors.activeTabColor,
-        tabBarInactiveTintColor: 'gray',
-        tabBarStyle: {
-          display: 'none',
-        },
-      })}
-    >
-      <Tab.Screen name="Prayer Times">
-        {(props) => (
-          <View style={{ flex: 1 }}>
-            <PrayerTimes 
-              {...props} 
-              themeColors={themeColors} 
+            if (route.name === 'Prayer Times') {
+              iconSource = require('./assets/prayer-time.png');
+            } else if (route.name === 'Quran') {
+              iconSource = require('./assets/Quran-icon.png');
+              iconStyle = {
+                ...iconStyle,
+                width: focused ? size * 2.5 : size * 1.8,
+                height: focused ? size * 2.5 : size * 1.8,
+                marginTop: 0,
+                marginBottom: 0
+              };
+            } else if (route.name === 'Tasbeeh') {
+              iconSource = require('./assets/Tasbeeh.png');
+            } else if (route.name === 'Qibla') {
+              iconSource = require('./assets/qibla-arrow.png');
+            } else if (route.name === 'Calendar') {
+              iconSource = require('./assets/islamic-calendar.png');
+            } else if (route.name === 'Hadith') {
+              iconSource = require('./assets/Hadith-icon.png');
+            } else if (route.name === 'Duas') {
+              iconSource = require('./assets/Duas-icon.png');
+            } else if (route.name === 'Settings') {
+              iconSource = require('./assets/SettingsFocused.png');
+            }
+
+            return (
+              <Image
+                source={iconSource}
+                style={iconStyle}
+              />
+            );
+          },
+          tabBarActiveTintColor: themeColors.activeTabColor,
+          tabBarInactiveTintColor: 'gray',
+          tabBarStyle: {
+            display: 'none',
+          },
+        })}
+      >
+        <Tab.Screen name="Prayer Times">
+          {(props) => (
+            <View style={{ flex: 1 }}>
+              <PrayerTimes 
+                {...props} 
+                themeColors={themeColors} 
+                language={language}
+                registerForPushNotificationsAsync={registerForPushNotificationsAsync}
+                isDarkMode={darkMode}
+              />
+            </View>
+          )}
+        </Tab.Screen>
+        <Tab.Screen name="Quran">
+          {(props) => (
+            <ScreenWrapper themeColors={themeColors}>
+              <ErrorBoundary>
+                <QuranReader {...props} themeColors={themeColors} language={language} />
+              </ErrorBoundary>
+            </ScreenWrapper>
+          )}
+        </Tab.Screen>
+        <Tab.Screen name="Tasbeeh">
+          {(props) => (
+            <ScreenWrapper themeColors={themeColors}>
+              <TasbeehCounter {...props} themeColors={themeColors} language={language} />
+            </ScreenWrapper>
+          )}
+        </Tab.Screen>
+        <Tab.Screen name="Duas">
+          {(props) => (
+            <ScreenWrapper themeColors={themeColors}>
+              <DuasStackScreen {...props} themeColors={themeColors} language={language} />
+            </ScreenWrapper>
+          )}
+        </Tab.Screen>
+        <Tab.Screen name="Qibla">
+          {(props) => <QiblaDirection isDarkMode={darkMode} language={language} />}
+        </Tab.Screen>
+        <Tab.Screen name="Calendar">
+          {(props) => (
+            <ScreenWrapper themeColors={themeColors}>
+              <ScrollView contentContainerStyle={styles.calendarContent}>
+                <IslamicCalendar {...props} themeColors={themeColors} language={language} />
+              </ScrollView>
+            </ScreenWrapper>
+          )}
+        </Tab.Screen>
+        <Tab.Screen name="Hadith">
+          {(props) => (
+            <HadithOfTheDay {...props} themeColors={themeColors} language={language} />
+          )}
+        </Tab.Screen>
+        <Tab.Screen name="Settings">
+          {(props) => (
+            <Settings
+              {...props}
+              darkMode={darkMode}
+              toggleDarkMode={toggleDarkMode}
+              theme={theme}
+              changeTheme={changeTheme}
+              themeColors={themeColors}
+              selectedFont={selectedFont}
+              changeFont={changeFont}
               language={language}
-              registerForPushNotificationsAsync={registerForPushNotificationsAsync}
-              isDarkMode={darkMode}
+              changeLanguage={changeLanguage}
             />
-          </View>
-        )}
-      </Tab.Screen>
-      <Tab.Screen name="Quran">
-        {(props) => (
-          <ScreenWrapper themeColors={themeColors}>
-            <ErrorBoundary>
-              <QuranReader {...props} themeColors={themeColors} language={language} />
-            </ErrorBoundary>
-          </ScreenWrapper>
-        )}
-      </Tab.Screen>
-      <Tab.Screen name="Tasbeeh">
-        {(props) => (
-          <ScreenWrapper themeColors={themeColors}>
-            <TasbeehCounter {...props} themeColors={themeColors} language={language} />
-          </ScreenWrapper>
-        )}
-      </Tab.Screen>
-      <Tab.Screen name="Duas">
-        {(props) => (
-          <ScreenWrapper themeColors={themeColors}>
-            <DuasStackScreen {...props} themeColors={themeColors} language={language} />
-          </ScreenWrapper>
-        )}
-      </Tab.Screen>
-      <Tab.Screen name="Qibla">
-        {(props) => <QiblaDirection isDarkMode={darkMode} language={language} />}
-      </Tab.Screen>
-      <Tab.Screen name="Calendar">
-        {(props) => (
-          <ScreenWrapper themeColors={themeColors}>
-            <ScrollView contentContainerStyle={styles.calendarContent}>
-              <IslamicCalendar {...props} themeColors={themeColors} language={language} />
-            </ScrollView>
-          </ScreenWrapper>
-        )}
-      </Tab.Screen>
-      <Tab.Screen name="Hadith">
-        {(props) => (
-          <HadithOfTheDay {...props} themeColors={themeColors} language={language} />
-        )}
-      </Tab.Screen>
-      <Tab.Screen name="Settings">
-        {(props) => (
-          <Settings
-            {...props}
-            darkMode={darkMode}
-            toggleDarkMode={toggleDarkMode}
-            theme={theme}
-            changeTheme={changeTheme}
-            themeColors={themeColors}
-            selectedFont={selectedFont}
-            changeFont={changeFont}
-            language={language}
-            changeLanguage={changeLanguage}
-          />
-        )}
-      </Tab.Screen>
-    </Tab.Navigator>
+          )}
+        </Tab.Screen>
+      </Tab.Navigator>
+    </>
   );
 }
 
@@ -467,6 +478,14 @@ const setupNotificationChannels = async () => {
   }
 };
 
+const AppStatusBar = ({ darkMode }) => (
+  <StatusBar 
+    barStyle={darkMode ? 'light-content' : 'dark-content'}
+    backgroundColor={darkMode ? '#1E1E1E' : '#FFFFFF'}
+    translucent={true}
+  />
+);
+
 export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [theme, setTheme] = useState('default');
@@ -512,7 +531,7 @@ export default function App() {
         // Add a small delay to ensure smooth transition
         setTimeout(() => {
           setIsLoading(false);
-        }, 2000);
+        }, 1200);
       } catch (error) {
         console.error('Error initializing app:', error);
         setIsLoading(false);
@@ -563,16 +582,12 @@ export default function App() {
     const savedLanguage = await AsyncStorage.getItem('language');
     if (savedLanguage) {
       setLanguage(savedLanguage);
-      // Remove the line that forces RTL
-      // I18nManager.forceRTL(savedLanguage === 'ar');
     }
   };
 
   const changeLanguage = async (newLanguage) => {
     setLanguage(newLanguage);
     await AsyncStorage.setItem('language', newLanguage);
-    // Remove the line that forces RTL
-    // I18nManager.forceRTL(newLanguage === 'ar');
     console.log('Language changed to:', newLanguage);
   };
 
@@ -790,7 +805,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: 'transparent',
-    paddingTop: -20 ,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   scrollViewContent: {
     flexGrow: 1,

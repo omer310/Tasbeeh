@@ -1,12 +1,13 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Animated, ScrollView, Dimensions, I18nManager, TextInput, Modal, Vibration } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Animated, ScrollView, Dimensions, I18nManager, TextInput, Modal, Vibration, StatusBar, useColorScheme } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 
 const { width, height } = Dimensions.get('window')
 
-
-
 const TasbeehCounter = ({ themeColors, language = 'en' }) => {
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+
   const [adhkars, setAdhkars] = useState({
     'سبحان الله وبحمده': { ar: 'سبحان الله وبحمده', en: 'Glory and praise be to Allah', count: 0, goal: 0 },
     'الحمد لله': { ar: 'الحمد لله', en: 'Praise be to Allah', count: 0, goal: 0 },
@@ -34,6 +35,21 @@ const TasbeehCounter = ({ themeColors, language = 'en' }) => {
   const [newAdhkarAr, setNewAdhkarAr] = useState('');
   const [newAdhkarEn, setNewAdhkarEn] = useState('');
   const [goalReached, setGoalReached] = useState(false);
+  const presetAdhkars = {
+    afterPrayer: [
+      { dhikr: 'سبحان الله', count: 33 },
+      { dhikr: 'الحمد لله', count: 33 },
+      { dhikr: 'الله أكبر', count: 33 },
+      { dhikr: 'لا إله إلا الله وحده لا شريك له، له الملك وله الحمد وهو على كل شيء قدير', count: 1 }
+    ],
+    morning: [
+      { dhikr: 'سبحان الله وبحمده', count: 100 },
+      { dhikr: 'أستغفر الله', count: 100 },
+      { dhikr: 'لا إله إلا الله', count: 100 }
+    ]
+  };
+  const [activePreset, setActivePreset] = useState(null);
+  const [currentPresetIndex, setCurrentPresetIndex] = useState(0);
 
   const styles = StyleSheet.create({
     safeArea: {
@@ -153,7 +169,7 @@ const TasbeehCounter = ({ themeColors, language = 'en' }) => {
       aspectRatio: 1,
       justifyContent: 'center',
       alignItems: 'center',
-      borderRadius: 1400,
+      borderRadius: 900,
       backgroundColor: themeColors.primaryLight,
     },
     adhkarSelector: {
@@ -242,15 +258,56 @@ const TasbeehCounter = ({ themeColors, language = 'en' }) => {
       borderRadius: 12,
       marginLeft: 5,
     },
+    presetBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: themeColors.primaryLight,
+      paddingHorizontal: 15,
+      paddingVertical: 8,
+      borderRadius: 20,
+      marginBottom: 10,
+    },
+    presetText: {
+      color: themeColors.textColor,
+      marginRight: 10,
+      fontSize: 14,
+    },
+    cancelPresetButton: {
+      padding: 4,
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      borderRadius: 12,
+    },
+    presetButtons: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      marginBottom: 20,
+    },
+    presetButton: {
+      backgroundColor: themeColors.primary,
+      paddingHorizontal: 15,
+      paddingVertical: 8,
+      borderRadius: 15,
+      marginHorizontal: 5,
+    },
+    presetButtonText: {
+      color: themeColors.white,
+      fontSize: 14,
+      fontWeight: 'bold',
+    },
   });
 
   const incrementCount = () => {
     const currentAdhkar = adhkars[selectedAdhkar];
     if (currentAdhkar.goal > 0 && currentAdhkar.count >= currentAdhkar.goal) {
+      if (activePreset) {
+        handlePresetComplete();
+      }
       return;
     }
 
-    Vibration.vibrate([0, 100, 50, 100]);
+    // Light feedback for each count
+    Vibration.vibrate([0, 40]);
+    
     setAdhkars(prev => ({
       ...prev,
       [selectedAdhkar]: {
@@ -259,8 +316,9 @@ const TasbeehCounter = ({ themeColors, language = 'en' }) => {
       }
     }));
 
+    // Goal completion feedback
     if (currentAdhkar.goal > 0 && currentAdhkar.count + 1 === currentAdhkar.goal) {
-      Vibration.vibrate([0, 200, 100, 200, 100, 200]);
+      Vibration.vibrate([0, 60, 60, 60]);
       setGoalReached(true);
     }
   };
@@ -345,8 +403,61 @@ const TasbeehCounter = ({ themeColors, language = 'en' }) => {
     return num.toString().split('').map(digit => arabicNumerals[digit] || digit).join('');
   };
 
+  const handlePresetComplete = () => {
+    if (!activePreset) return;
+    
+    const preset = presetAdhkars[activePreset];
+    if (currentPresetIndex < preset.length - 1) {
+      Vibration.vibrate([0, 60, 60, 60]);
+      setCurrentPresetIndex(currentPresetIndex + 1);
+      const nextDhikr = preset[currentPresetIndex + 1];
+      setSelectedAdhkar(nextDhikr.dhikr);
+      setAdhkars(prev => ({
+        ...prev,
+        [nextDhikr.dhikr]: {
+          ...prev[nextDhikr.dhikr],
+          count: 0,
+          goal: nextDhikr.count
+        }
+      }));
+    } else {
+      Vibration.vibrate([0, 100, 50, 100, 50, 100]);
+      setAdhkars(prev => ({
+        ...prev,
+        [selectedAdhkar]: {
+          ...prev[selectedAdhkar],
+          goal: 0
+        }
+      }));
+      setActivePreset(null);
+      setCurrentPresetIndex(0);
+    }
+  };
+
+  const startPreset = (presetName) => {
+    const preset = presetAdhkars[presetName];
+    setActivePreset(presetName);
+    setCurrentPresetIndex(0);
+    const firstDhikr = preset[0];
+    setSelectedAdhkar(firstDhikr.dhikr);
+    setAdhkars(prev => ({
+      ...prev,
+      [firstDhikr.dhikr]: {
+        ...prev[firstDhikr.dhikr],
+        count: 0,
+        goal: firstDhikr.count
+      }
+    }));
+    toggleBottomSheet();
+  };
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.backgroundColor }]}>
+      <StatusBar
+        barStyle={isDarkMode ? "light-content" : "dark-content"}
+        backgroundColor="transparent"
+        translucent={true}
+      />
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={resetCount}>
@@ -356,6 +467,31 @@ const TasbeehCounter = ({ themeColors, language = 'en' }) => {
             <Text style={{ color: themeColors.primary }}>{language === 'ar' ? 'تحديد هدف' : 'Set Goal'}</Text>
           </TouchableOpacity>
         </View>
+
+        {activePreset && (
+          <View style={styles.presetBanner}>
+            <Text style={styles.presetText}>
+              {language === 'ar' 
+                ? `${currentPresetIndex + 1}/${presetAdhkars[activePreset].length} :${activePreset}` 
+                : `${activePreset}: ${currentPresetIndex + 1}/${presetAdhkars[activePreset].length}`}
+            </Text>
+            <TouchableOpacity 
+              style={styles.cancelPresetButton} 
+              onPress={() => {
+                setAdhkars(prev => ({
+                  ...prev,
+                  [selectedAdhkar]: {
+                    ...prev[selectedAdhkar],
+                    goal: 0
+                  }
+                }));
+                setActivePreset(null);
+              }}
+            >
+              <Icon name="x" size={16} color={themeColors.primary} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <TouchableOpacity 
           style={styles.adhkarSelector} 
@@ -422,6 +558,24 @@ const TasbeehCounter = ({ themeColors, language = 'en' }) => {
             <Text style={styles.bottomSheetTitle}>{language === 'ar' ? 'الأذكار' : 'Adhkars'}</Text>
             <TouchableOpacity onPress={toggleBottomSheet}>
               <Icon name="x" size={24} color={themeColors.textColor} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.presetButtons}>
+            <TouchableOpacity 
+              style={styles.presetButton} 
+              onPress={() => startPreset('afterPrayer')}
+            >
+              <Text style={styles.presetButtonText}>
+                {language === 'ar' ? 'أذكار بعد الصلاة' : 'After Prayer Adhkar'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.presetButton} 
+              onPress={() => startPreset('morning')}
+            >
+              <Text style={styles.presetButtonText}>
+                {language === 'ar' ? 'أذكار الصباح' : 'Morning Adhkar'}
+              </Text>
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.bottomSheetContent}>
