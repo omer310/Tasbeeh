@@ -189,6 +189,10 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
     let headingSubscription;
 
     const setupCompass = async () => {
+      if (Platform.OS === 'web') {
+        setError('The live Qibla compass is available in the mobile app.');
+        return;
+      }
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
@@ -355,6 +359,7 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
               borderColor: getCompassRimColor(),
               borderWidth: 20,
               borderRadius: 999,
+              backgroundColor: themeColors.isDark ? '#E2E8DC' : '#F6F8EF',
             },
           ]}
         >
@@ -421,10 +426,10 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
     return (
       <View style={directionStyles.container}>
         <Text style={directionStyles.text}>
-          <Text style={directionStyles.prefix}>
+          <Text style={[directionStyles.prefix, { color: themeColors.textColor }]}>
             {content.prefix}
           </Text>
-          <Text style={directionStyles.highlight}>
+          <Text style={[directionStyles.highlight, { color: themeColors.primaryColor }]}>
             {content.highlight}
           </Text>
         </Text>
@@ -432,11 +437,20 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
     );
   };
 
+  if (error) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', backgroundColor: themeColors.backgroundColor }]}>
+        <Text style={[styles.error, { color: themeColors.textColor }]}>{error}</Text>
+      </View>
+    );
+  }
+
   return (
     <ImageBackground
       source={require('../assets/islamic-pattern4.png')}
       style={[styles.backgroundImage, { backgroundColor: themeColors.backgroundColor }]}
       resizeMode="cover"
+      imageStyle={{ opacity: themeColors.isDark ? 0.07 : 0.3 }}
     >
       <View style={styles.container}>
         <View style={styles.contentContainer}>

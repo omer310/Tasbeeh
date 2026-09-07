@@ -15,7 +15,10 @@
       },
       "env": {
         "APP_ENV": "preview"
-      }
+      },
+      "channel": "preview",
+      "developmentClient": false,
+      "autoIncrement": true
     },
     "production": {
       "autoIncrement": true,

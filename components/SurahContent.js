@@ -12,7 +12,7 @@ const SurahContent = ({ surah, themeColors, onBack }) => {
 
   const fetchSurahContent = async () => {
     try {
-      const response = await axios.get(`http://api.alquran.cloud/v1/surah/${surah.number}/quran-uthmani`);
+      const response = await axios.get(`https://api.alquran.cloud/v1/surah/${surah.number}/quran-uthmani`);
       const surahData = response.data.data;
       
       if (surah.number !== 1 && surahData.ayahs.length > 0) {

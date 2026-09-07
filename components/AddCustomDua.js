@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { Alert } from 'react-native';
+import { Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { useDua } from '../contexts/DuaContext';
 
 const AddCustomDua = ({ route, navigation }) => {
-  const { onSave, isDarkMode, themeColors, language } = route.params;
+  const { isDarkMode, themeColors } = route.params;
+  const { onAddCustomDua, hydrated } = useDua();
 
   const [title, setTitle] = useState('');
   const [titleAr, setTitleAr] = useState('');
@@ -12,7 +13,7 @@ const AddCustomDua = ({ route, navigation }) => {
   const [translation, setTranslation] = useState('');
 
   const handleSave = () => {
-    if (title && arabic && translation) {
+    if (hydrated && title.trim() && arabic.trim() && translation.trim()) {
       const newDua = {
         title,
         titleAr,
@@ -20,7 +21,7 @@ const AddCustomDua = ({ route, navigation }) => {
         transliteration,
         translation,
       };
-      onSave(newDua);
+      onAddCustomDua(newDua);
       navigation.goBack();
     } else {
       Alert.alert('Error', 'Please fill in at least the title, Arabic text, and translation.');
@@ -29,6 +30,7 @@ const AddCustomDua = ({ route, navigation }) => {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: isDarkMode ? '#1E1E1E' : themeColors.backgroundColor }]}>
+      <TouchableOpacity accessibilityRole="button" onPress={() => navigation.goBack()} style={{ paddingVertical: 12 }}><Text style={{ color: themeColors.activeTabColor }}>Back to Duas</Text></TouchableOpacity>
       <Text style={[styles.label, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}>Title</Text>
       <TextInput
         style={[styles.input, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor, borderColor: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}

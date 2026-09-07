@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  View, 
-  Text, 
-  FlatList, 
-  ActivityIndicator, 
-  TextInput, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  FlatList,
+  ActivityIndicator,
+  TextInput,
+  TouchableOpacity,
   StyleSheet,
   Platform,
-  SafeAreaView,
+
   Modal
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import { colors, globalStyles } from '../styles/globalStyles';
 
@@ -32,14 +33,14 @@ const translations = {
   hadith: { en: 'Hadith', ar: 'حديث' },
   close: { en: 'Close', ar: 'إغلاق' },
   relevance: { en: 'Relevance', ar: 'الصلة' },
-  relevanceExplanation: { 
-    en: 'Higher score means more matches found', 
+  relevanceExplanation: {
+    en: 'Higher score means more matches found',
     ar: 'الدرجة الأعلى تعني المزيد من التطابقات'
   },
   searching: { en: 'Searching...', ar: 'جاري البحث...' },
-  searchingInBook: { 
-    en: 'Searching in', 
-    ar: 'جاري البحث في' 
+  searchingInBook: {
+    en: 'Searching in',
+    ar: 'جاري البحث في'
   },
 };
 
@@ -91,12 +92,12 @@ export default function HadithOfTheDay({ themeColors, language }) {
       const araResponse = await axios.get(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/ara-${selectedEdition}.json`);
       const engHadiths = engResponse.data.hadiths;
       const araHadiths = araResponse.data.hadiths;
-      
+
       const searchTerms = searchTerm
         .split(' ')
         .filter(term => term.length > 0)
         .map(term => term.trim());
-      
+
       const foundHadiths = engHadiths.filter(h => {
         const engText = h.text.toLowerCase();
         const araText = araHadiths.find(ah => ah.hadithnumber === h.hadithnumber).text;
@@ -105,9 +106,9 @@ export default function HadithOfTheDay({ themeColors, language }) {
         return searchTerms.some(term => {
           const normalizedAraText = araText.normalize('NFKD').replace(/[\u064B-\u065F]/g, '');
           const normalizedSearchTerm = term.normalize('NFKD').replace(/[\u064B-\u065F]/g, '');
-          
+
           const isArabic = /[\u0600-\u06FF]/.test(term);
-          
+
           if (isArabic) {
             return normalizedAraText.includes(normalizedSearchTerm);
           } else {
@@ -115,13 +116,13 @@ export default function HadithOfTheDay({ themeColors, language }) {
           }
         });
       });
-      
+
       const sortedHadiths = foundHadiths.sort((a, b) => {
         const scoreA = calculateRelevanceScore(a, searchTerms, araHadiths);
         const scoreB = calculateRelevanceScore(b, searchTerms, araHadiths);
         return scoreB - scoreA;
       });
-      
+
       if (sortedHadiths.length > 0) {
         setHadiths(sortedHadiths.map(h => ({
           engText: h.text,
@@ -164,14 +165,14 @@ export default function HadithOfTheDay({ themeColors, language }) {
         score += 10;
       }
     });
-    
+
     return Math.round(score);
   };
 
   const renderHadith = useCallback(({ item }) => (
     <View style={[
-      styles.hadithContainer, 
-      { 
+      styles.hadithContainer,
+      {
         backgroundColor: themeColors.isDark ? 'rgba(255, 255, 255, 0.05)' : themeColors.backgroundColor,
         borderRadius: 15,
       }
@@ -181,7 +182,7 @@ export default function HadithOfTheDay({ themeColors, language }) {
           #{item.hadithnumber}
         </Text>
         {item.relevanceScore > 0 && (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.relevanceBadge, { backgroundColor: themeColors.primary + '20' }]}
             onPress={() => alert(getTranslatedText('relevanceExplanation'))}
           >
@@ -191,7 +192,7 @@ export default function HadithOfTheDay({ themeColors, language }) {
           </TouchableOpacity>
         )}
       </View>
-      
+
       {language === 'ar' ? (
         // Arabic mode - show Arabic first
         <>
@@ -207,9 +208,9 @@ export default function HadithOfTheDay({ themeColors, language }) {
           <Text style={[styles.arabicText, { color: themeColors.textColor }]}>{item.araText}</Text>
         </>
       )}
-      
+
       <Text style={[styles.hadithReference, { color: themeColors.secondaryTextColor }]}>
-        - {language === 'ar' ? EDITIONS.find(e => e.value === selectedEdition).labelAr : item.collection}, 
+        - {language === 'ar' ? EDITIONS.find(e => e.value === selectedEdition).labelAr : item.collection},
         {getTranslatedText('hadith')} {item.hadithnumber}
       </Text>
     </View>
@@ -239,12 +240,12 @@ export default function HadithOfTheDay({ themeColors, language }) {
           onChangeText={onChangeSearchTerm}
           editable={!loading}
         />
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[
-            styles.button, 
+            styles.button,
             { backgroundColor: themeColors.primary },
             loading && styles.buttonDisabled
-          ]} 
+          ]}
           onPress={onPressSearch}
           disabled={loading}
         >
@@ -261,26 +262,26 @@ export default function HadithOfTheDay({ themeColors, language }) {
         <View style={styles.searchingIndicator}>
           <Text style={[styles.searchingText, { color: themeColors.textColor }]}>
             {getTranslatedText('searchingInBook')} {' '}
-            {language === 'ar' 
-              ? EDITIONS.find(e => e.value === selectedEdition).labelAr 
+            {language === 'ar'
+              ? EDITIONS.find(e => e.value === selectedEdition).labelAr
               : EDITIONS.find(e => e.value === selectedEdition).label}
             ...
           </Text>
         </View>
       )}
-      <TouchableOpacity 
-        style={[styles.pickerButton, { borderColor: themeColors.textColor }]} 
+      <TouchableOpacity
+        style={[styles.pickerButton, { borderColor: themeColors.textColor }]}
         onPress={() => setPickerVisible(true)}
         disabled={loading}
       >
         <Text style={[styles.pickerButtonText, { color: themeColors.textColor }]}>
-          {language === 'ar' 
-            ? EDITIONS.find(e => e.value === selectedEdition).labelAr 
+          {language === 'ar'
+            ? EDITIONS.find(e => e.value === selectedEdition).labelAr
             : EDITIONS.find(e => e.value === selectedEdition).label}
         </Text>
       </TouchableOpacity>
-      <TouchableOpacity 
-        style={[styles.button, { backgroundColor: themeColors.primary }]} 
+      <TouchableOpacity
+        style={[styles.button, { backgroundColor: themeColors.primary }]}
         onPress={onPressRandom}
         disabled={loading}
       >
@@ -332,8 +333,8 @@ export default function HadithOfTheDay({ themeColors, language }) {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { 
-      backgroundColor: themeColors.isDark ? '#121212' : themeColors.backgroundColor 
+    <SafeAreaView style={[styles.container, {
+      backgroundColor: themeColors.isDark ? '#121212' : themeColors.backgroundColor
     }]}>
       <FlatList
         ListHeaderComponent={renderHeader}
@@ -419,7 +420,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     marginBottom: 15,
-    direction: 'ltr',
+    writingDirection: 'ltr',
   },
   arabicText: {
     fontSize: 20,
@@ -427,7 +428,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     textAlign: 'right',
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
-    direction: 'rtl',
+    writingDirection: 'rtl',
   },
   hadithReference: {
     fontSize: 14,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, Dimensions, SafeAreaView, ActivityIndicator, TextInput, ScrollView, Platform, TouchableWithoutFeedback, StatusBar, useColorScheme } from 'react-native';
+import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, Dimensions,  ActivityIndicator, TextInput, ScrollView, Platform, TouchableWithoutFeedback, StatusBar, useColorScheme } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import quranImages from './quranImages';
@@ -10,13 +11,18 @@ import CustomColorPicker from './CustomColorPicker';
 import { useNavigation } from '@react-navigation/native';
 import { Switch } from 'react-native';
 import { surahData } from '../data/surahData';
-import EnglishTranslation from './EnglishTranslation';
+import QuranTextPage from './QuranTextPage';
+import chapters from '../data/quran/chapters.json';
+import { getQuranPage } from '../utils/quranData';
 import BookmarkManager from './BookmarkManager';
 import BookmarkList from './BookmarkList';
 
 function QuranReader({ navigation, themeColors, language }) {
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === 'dark';
+  const isDarkMode = themeColors.isDark;
+  const [readerMode, setReaderMode] = useState('mushaf');
+  const [fontSize, setFontSize] = useState(30);
+  const [showTranslation, setShowTranslation] = useState(true);
+  const [readerReady, setReaderReady] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedSurah, setSelectedSurah] = useState(null);
@@ -41,78 +47,34 @@ function QuranReader({ navigation, themeColors, language }) {
     // Fetch surahs data from API and load bookmarks
     const fetchData = async () => {
       try {
-        const response = await fetch('https://api.quran.com/api/v4/chapters?language=en');
-        const data = await response.json();
+        const data = { chapters };
+        const preferences = JSON.parse(await AsyncStorage.getItem('quranReaderPreferences') || '{}');
+        if (['mushaf', 'flow', 'verses'].includes(preferences.mode)) setReaderMode(preferences.mode);
+        if (Number.isFinite(preferences.fontSize)) setFontSize(Math.max(24, Math.min(44, preferences.fontSize)));
+        setShowTranslation(preferences.translation !== false);
+        if (Number.isInteger(preferences.page)) setCurrentPage(Math.max(1, Math.min(604, preferences.page)));
         const savedBookmarks = await AsyncStorage.getItem('quranBookmarks');
-        
+
         if (savedBookmarks !== null) {
           setBookmarks(JSON.parse(savedBookmarks));
         }
-        
+
         const sortedSurahs = sortSurahs(data.chapters, JSON.parse(savedBookmarks) || {});
         setSurahs(sortedSurahs);
         setFilteredSurahs(sortedSurahs);
       } catch (error) {
-        console.error('Error fetching data:', error);
-      }
+        setSurahs(chapters); setFilteredSurahs(chapters);
+        console.warn('Reading settings could not be loaded:', error);
+      } finally { setReaderReady(true); }
     };
 
     fetchData();
   }, []);
 
   useEffect(() => {
-    // Fetch English translation when isEnglishVersion is true
-    if (isEnglishVersion) {
-      fetchEnglishTranslation();
-    }
-  }, [isEnglishVersion]);
-
-  const fetchEnglishTranslation = async () => {
-    try {
-      const response = await fetch('https://api.quran.com/api/v4/quran/translations/131');
-      const data = await response.json();
-
-      if (!data.translations || !Array.isArray(data.translations)) {
-        console.error('Unexpected API response structure:', data);
-        return;
-      }
-
-      const formattedPages = {};
-      data.translations.forEach((verse, index) => {
-        if (!verse || typeof verse.text !== 'string') {
-          return;
-        }
-
-        // Enhanced text cleaning
-        const cleanText = verse.text
-          .replace(/<sup.*?<\/sup>/g, '') // Remove sup elements with their content
-          .replace(/[<>]/g, '') // Remove any remaining angle brackets
-          .replace(/foot_note=\d+/g, '') // Remove foot_note references
-          .replace(/\s+/g, ' ') // Normalize spaces
-          .replace(/["]/g, '"') // Replace special quotes
-          .replace(/[']/g, "'") // Replace special apostrophes
-          .replace(/\s+([.,!?])/g, '$1') // Remove spaces before punctuation
-          .trim();
-
-        // Calculate page number (adjust this calculation as needed)
-        const pageNumber = Math.floor(index / 7) + 1;
-        
-        if (!formattedPages[pageNumber]) {
-          formattedPages[pageNumber] = [];
-        }
-        
-        formattedPages[pageNumber].push({
-          verseNumber: index + 1,
-          text: cleanText
-        });
-      });
-
-      setEnglishPages(formattedPages);
-    } catch (error) {
-      console.error('Error fetching English translation:', error);
-      console.error('Error details:', error.message, error.stack);
-    }
-  };
+    if (!readerReady) return;
+    AsyncStorage.setItem('quranReaderPreferences', JSON.stringify({ mode: readerMode, fontSize, translation: showTranslation, page: currentPage })).catch(console.warn);
+  }, [readerReady, readerMode, fontSize, showTranslation, currentPage]);
 
   const sortSurahs = (surahsToSort, currentBookmarks) => {
     return BookmarkManager.sortSurahs(surahsToSort, currentBookmarks);
@@ -133,11 +95,11 @@ function QuranReader({ navigation, themeColors, language }) {
   useEffect(() => {
     // Update Juz number based on current page
     // This is a simplified calculation and might need adjustment
-    const calculatedJuz = Math.min(Math.ceil(currentPage / 20), 30);
+    const calculatedJuz = getQuranPage(currentPage)[0]?.juz || 1;
     setCurrentJuz(calculatedJuz);
 
     // Update Surah name
-    const surah = surahData.reduce((prev, curr) => 
+    const surah = surahData.reduce((prev, curr) =>
       (curr.startPage <= currentPage) ? curr : prev
     );
     setCurrentSurah(surah.name);
@@ -168,10 +130,10 @@ function QuranReader({ navigation, themeColors, language }) {
 
   const handleSurahClick = (surah) => {
     // Find the bookmarked page for this surah
-    const bookmarkedPage = Object.keys(bookmarks).find(page => 
+    const bookmarkedPage = Object.keys(bookmarks).find(page =>
       parseInt(page) >= surah.pages[0] && parseInt(page) <= surah.pages[surah.pages.length - 1]
     );
-    
+
     // Update both states at once
     setSelectedSurah(surah);
     setCurrentPage(bookmarkedPage ? parseInt(bookmarkedPage) : surah.pages[0]);
@@ -237,15 +199,15 @@ function QuranReader({ navigation, themeColors, language }) {
     const bookmarkData = bookmarks[currentPage];
     const bookmarkColor = bookmarkData?.color || bookmarkData;
     return (
-      <TouchableOpacity onPress={toggleBookmark} style={styles.iconButtonContainer}>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Bookmark this page" onPress={toggleBookmark} style={styles.iconButtonContainer}>
         <LinearGradient
           colors={[themeColors.gradientStart, themeColors.gradientEnd]}
           style={styles.iconButton}
         >
-          <Ionicons 
-            name={bookmarkColor ? "bookmark" : "bookmark-outline"} 
-            size={24} 
-            color={bookmarkColor || "#FFFFFF"} 
+          <Ionicons
+            name={bookmarkColor ? "bookmark" : "bookmark-outline"}
+            size={24}
+            color={bookmarkColor || "#FFFFFF"}
           />
         </LinearGradient>
       </TouchableOpacity>
@@ -253,7 +215,7 @@ function QuranReader({ navigation, themeColors, language }) {
   };
 
   const renderSurahItem = ({ item }) => {
-    const bookmarkedPage = Object.keys(bookmarks).find(page => 
+    const bookmarkedPage = Object.keys(bookmarks).find(page =>
       parseInt(page) >= item.pages[0] && parseInt(page) <= item.pages[item.pages.length - 1]
     );
     const isBookmarked = !!bookmarkedPage;
@@ -279,14 +241,14 @@ function QuranReader({ navigation, themeColors, language }) {
         </View>
         {isBookmarked && (
           <View style={styles.bookmarkIconContainer}>
-            <Ionicons 
-              name="bookmark" 
-              size={24} 
-              color={bookmarkColor} 
+            <Ionicons
+              name="bookmark"
+              size={24}
+              color={bookmarkColor}
               style={[
                 styles.bookmarkIcon,
                 themeColors.isDark && { opacity: 0.9 }
-              ]} 
+              ]}
             />
           </View>
         )}
@@ -300,81 +262,10 @@ function QuranReader({ navigation, themeColors, language }) {
     console.warn('Failed to load Quran page image');
   };
 
-  const handleVersePress = async (verseKey) => {
-    try {
-      // Stop any playing audio
-      if (audioPlayer) {
-        audioPlayer.stop();
-      }
-
-      // Fetch audio URL
-      const audioResponse = await fetch(
-        `https://api.quran.com/api/v4/recitations/7/by_ayah/${verseKey}`
-      );
-      const audioData = await audioResponse.json();
-      const audioUrl = audioData.audio_files[0]?.audio_url;
-
-      // Fetch tafsir
-      const tafsirResponse = await fetch(
-        `https://api.quran.com/api/v4/tafsirs/169/by_ayah/${verseKey}`
-      );
-      const tafsirData = await tafsirResponse.json();
-      setTafsirContent(tafsirData.tafsirs[0]?.text || 'Tafsir not available');
-
-      // Play audio
-      if (audioUrl) {
-        const sound = new Sound(audioUrl, null, (error) => {
-          if (error) {
-            console.error('Error loading sound:', error);
-            return;
-          }
-          sound.play();
-          setAudioPlayer(sound);
-        });
-      }
-
-      setSelectedVerse(verseKey);
-      setShowTafsir(true);
-    } catch (error) {
-      console.error('Error handling verse press:', error);
-    }
-  };
-
-  const renderVerseOverlay = () => {
-    if (!showTafsir) return null;
-
-    return (
-      <BlurView
-        intensity={120}
-        tint={themeColors.isDark ? 'dark' : 'light'}
-        style={styles.verseOverlay}
-      >
-        <View style={[styles.tafsirContainer, { backgroundColor: themeColors.backgroundColor + '80' }]}>
-          <TouchableOpacity 
-            style={styles.closeButton}
-            onPress={() => {
-              setShowTafsir(false);
-              if (audioPlayer) {
-                audioPlayer.stop();
-              }
-            }}
-          >
-            <Ionicons name="close" size={24} color={themeColors.textColor} />
-          </TouchableOpacity>
-          <ScrollView style={styles.tafsirContent}>
-            <Text style={[styles.tafsirText, { color: themeColors.textColor }]}>
-              {tafsirContent}
-            </Text>
-          </ScrollView>
-        </View>
-      </BlurView>
-    );
-  };
-
   const renderQuranPage = () => (
     <View style={[
-      styles.pageContainer, 
-      { backgroundColor: themeColors.isDark ? themeColors.backgroundColor : 'white' }
+      styles.pageContainer,
+      { backgroundColor: '#FAF9F4' }
     ]}>
       <View style={styles.headerInfoContainer}>
         <LinearGradient
@@ -398,10 +289,10 @@ function QuranReader({ navigation, themeColors, language }) {
           </View>
         </LinearGradient>
       </View>
-      
+
       <View style={styles.imageContainer}>
         <Image
-          style={[styles.pageImage, themeColors.isDark && styles.invertedImage]}
+          style={styles.pageImage}
           source={quranImages[currentPage] || quranImages[1]}
           resizeMode="contain"
         />
@@ -432,14 +323,10 @@ function QuranReader({ navigation, themeColors, language }) {
           backgroundColor="transparent"
           translucent={true}
         />
-        <TouchableOpacity 
-          activeOpacity={1} 
-          onPress={handleOutsideClick}
-          style={styles.content}
-        >
+        <View style={styles.content}>
           <View style={styles.quranContent}>
             <View style={[styles.topBar, { backgroundColor: themeColors.backgroundColor }]}>
-              <TouchableOpacity onPress={toggleSurahList} style={styles.iconButtonContainer}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Quran contents" onPress={toggleSurahList} style={styles.iconButtonContainer}>
                 <LinearGradient
                   colors={[themeColors.gradientStart, themeColors.gradientEnd]}
                   style={styles.iconButton}
@@ -448,8 +335,8 @@ function QuranReader({ navigation, themeColors, language }) {
                 </LinearGradient>
               </TouchableOpacity>
               {renderBookmarkIcon()}
-              <TouchableOpacity 
-                onPress={toggleBookmarkList} 
+              <TouchableOpacity
+                accessibilityRole="button" accessibilityLabel="Quran bookmarks" onPress={toggleBookmarkList}
                 style={styles.iconButtonContainer}
               >
                 <LinearGradient
@@ -460,14 +347,28 @@ function QuranReader({ navigation, themeColors, language }) {
                 </LinearGradient>
               </TouchableOpacity>
             </View>
-            <PanGestureHandler
+            <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 10, paddingBottom: 10 }}>
+              {[['mushaf', 'Mushaf'], ['flow', 'Flowing'], ['verses', 'Ayah cards']].map(([id, label]) => <TouchableOpacity key={id} accessibilityRole="tab" accessibilityState={{ selected: readerMode === id }} onPress={() => setReaderMode(id)} style={{ flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center', backgroundColor: readerMode === id ? themeColors.activeTabColor : themeColors.inputBackground }}><Text style={{ color: readerMode === id ? '#fff' : themeColors.textColor, fontWeight: '600' }}>{label}</Text></TouchableOpacity>)}
+            </View>
+            {readerMode !== 'mushaf' && <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 }}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Decrease Quran text size" disabled={fontSize <= 24} onPress={() => setFontSize(value => Math.max(24, value - 2))} style={{ padding: 10 }}><Text style={{ color: themeColors.textColor }}>A−</Text></TouchableOpacity>
+              <Text style={{ color: themeColors.secondaryTextColor }}>{fontSize}</Text>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Increase Quran text size" disabled={fontSize >= 44} onPress={() => setFontSize(value => Math.min(44, value + 2))} style={{ padding: 10 }}><Text style={{ color: themeColors.textColor }}>A+</Text></TouchableOpacity>
+              {readerMode === 'verses' && <><Text style={{ color: themeColors.textColor }}>English</Text><Switch accessibilityLabel="Show English translation" value={showTranslation} onValueChange={setShowTranslation} /></>}
+            </View>}
+            <PanGestureHandler enabled={readerMode === 'mushaf'}
               onHandlerStateChange={handleGestureEvent}
               activeOffsetX={[-20, 20]}
             >
               <View style={styles.pageContainer}>
-                {renderQuranPage()}
+                {readerMode === 'mushaf' ? renderQuranPage() : <QuranTextPage page={currentPage} mode={readerMode} fontSize={fontSize} translation={showTranslation} themeColors={themeColors} />}
               </View>
             </PanGestureHandler>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6 }}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Previous Quran page" disabled={currentPage <= 1} onPress={() => setCurrentPage(page => Math.max(1, page - 1))} style={{ padding: 10, opacity: currentPage <= 1 ? 0.3 : 1 }}><Ionicons name="chevron-back" size={22} color={themeColors.activeTabColor} /></TouchableOpacity>
+              <Text style={{ color: themeColors.secondaryTextColor }}>{currentPage} / 604</Text>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next Quran page" disabled={currentPage >= 604} onPress={() => setCurrentPage(page => Math.min(604, page + 1))} style={{ padding: 10, opacity: currentPage >= 604 ? 0.3 : 1 }}><Ionicons name="chevron-forward" size={22} color={themeColors.activeTabColor} /></TouchableOpacity>
+            </View>
           </View>
           {showSurahList && (
             <BlurView
@@ -524,7 +425,7 @@ function QuranReader({ navigation, themeColors, language }) {
                   currentColor={bookmarks[currentPage]}
                   usedColors={getUsedColors()}
                 />
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => setShowColorPicker(false)}
                   style={styles.closeColorPickerButton}
                 >
@@ -546,7 +447,7 @@ function QuranReader({ navigation, themeColors, language }) {
               surahs={surahs}
             />
           )}
-        </TouchableOpacity>
+        </View>
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -572,13 +473,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: 15,
-    paddingTop: 30,
+    paddingTop: 10,
     borderBottomWidth: 1,
     borderColor: 'rgba(204, 204, 204, 0.3)',
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
     zIndex: 1001,
   },
   iconButtonContainer: {
@@ -594,17 +491,11 @@ const styles = StyleSheet.create({
   },
   pageContainer: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 90,
+    paddingHorizontal: 0,
+    paddingTop: 0,
     paddingBottom: 0,
   },
-  headerInfoContainer: {
-    position: 'absolute',
-    top: 20,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-  },
+  headerInfoContainer: { paddingVertical: 10 },
   headerStrip: {
     height: 32,
     marginHorizontal: 16,
@@ -652,12 +543,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: -25,
+    marginTop: 0,
   },
   pageImage: {
     width: '100%',
     height: '100%',
-    aspectRatio: 0.6,
+
   },
   loadingContainer: {
     position: 'absolute',
@@ -703,7 +594,7 @@ const styles = StyleSheet.create({
   },
   surahListContainer: {
     position: 'absolute',
-    top: 85,
+    top: 66,
     left: 0,
     width: '85%',
     height: '87%',

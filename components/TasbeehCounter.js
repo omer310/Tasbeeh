@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Animated, ScrollView, Dimensions, I18nManager, TextInput, Modal, Vibration, StatusBar, useColorScheme } from 'react-native';
-import Icon from 'react-native-vector-icons/Feather';
+import { View, Text, TouchableOpacity, StyleSheet,  Animated, ScrollView, Dimensions, I18nManager, TextInput, Modal, Vibration, StatusBar, useColorScheme } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Feather as Icon } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window')
 

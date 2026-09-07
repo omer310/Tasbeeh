@@ -4,54 +4,36 @@
     "slug": "TasbeehApp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon2.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
+    "icon": "./assets/app-icon.png",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
         "UIBackgroundModes": [
           "audio",
-          "fetch",
-          "remote-notification"
-        ],
-        "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true
-        }
+          "processing"
+        ]
       },
-      "icon": "./assets/icon2.png",
-      "runtimeVersion": {
-        "policy": "appVersion"
-      }
+      "icon": "./assets/app-icon.png",
+      "bundleIdentifier": "com.manaratalmuslim"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon2.png",
+        "foregroundImage": "./assets/app-icon.png",
         "backgroundColor": "#509272"
       },
-      "icon": "./assets/icon2.png",
+      "icon": "./assets/app-icon.png",
       "permissions": [
-        "NOTIFICATIONS",
+        "POST_NOTIFICATIONS",
         "SCHEDULE_EXACT_ALARM",
-        "USE_EXACT_ALARM",
         "RECEIVE_BOOT_COMPLETED",
-        "WAKE_LOCK",
-        "FOREGROUND_SERVICE",
-        "SYSTEM_ALERT_WINDOW"
+        "VIBRATE"
       ],
-      "package": "com.manaratalmuslim",
-      "useNextNotificationsApi": true,
-      "runtimeVersion": "1.0.0",
-      "config": {
-        "largeHeap": true
-      }
+      "package": "com.manaratalmuslim"
     },
     "web": {
-      "favicon": "./assets/icon2.png"
+      "favicon": "./assets/icon2.png",
+      "bundler": "metro"
     },
     "plugins": [
       [
@@ -59,40 +41,37 @@
         {
           "icon": "./assets/icon1.png",
           "color": "#ffffff",
-          "sounds": [ 
-            "./assets/adhan.mp3",
-            "./assets/madinah_adhan.mp3",
-            "./assets/makkah_adhan.mp3",
-            "./assets/long_beep.mp3"
-          ],
-          "mode": "production",
-          "androidMode": "default",
-          "androidCollapsedTitle": "Prayer Times",
-          "androidBadgeIconType": "large",
-          "androidImportance": "max",
-          "androidShowWhen": true,
-          "androidAllowWhileIdle": true,
-          "androidAllowInForeground": true,
-          "androidPriority": "max"
+          "sounds": [
+            "./assets/notifications/adhan.wav",
+            "./assets/notifications/madinah_adhan.wav",
+            "./assets/notifications/makkah_adhan.wav",
+            "./assets/notifications/long_beep.wav"
+          ]
         }
       ],
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location."
+          "locationWhenInUsePermission": "Allow Manarat Al-Muslim to use your location for prayer times and Qibla direction."
         }
       ],
       [
-        "expo-background-fetch",
+        "expo-audio",
         {
-          "backgroundFetch": true,
-          "startOnBoot": true
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": true
         }
       ],
+      "expo-background-task",
+      "expo-font",
       [
-        "expo-av",
+        "expo-splash-screen",
         {
-          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone."
+          "image": "./assets/icon2.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
         }
       ]
     ],
@@ -101,22 +80,15 @@
         "projectId": "0871aeac-9dd1-4614-b6e6-7614e6b8cade"
       }
     },
-    "fonts": [
-      {
-        "asset": "./assets/fonts/Scheherazade-Regular.ttf",
-        "family": "Scheherazade"
-      },
-      {
-        "asset": "assets/fonts/NotoKufiArabic-Regular.ttf",
-        "family": "NotoKufiArabic"
-      }
-    ],
-    "assetBundlePatterns": [
-      "**/*",
-      "assets/quran-images/*"
-    ],
     "updates": {
       "url": "https://u.expo.dev/0871aeac-9dd1-4614-b6e6-7614e6b8cade"
+    },
+    "scheme": "manarat",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "experiments": {
+      "reactCompiler": false
     }
   }
 }

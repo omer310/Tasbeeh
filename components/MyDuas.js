@@ -5,7 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useDua } from '../contexts/DuaContext';
 
 const MyDuas = ({ navigation, isDarkMode, themeColors, language }) => {
-  const { myDuas, favorites, notes, onToggleFavorite } = useDua();
+  const { myDuas, favorites, notes, onToggleFavorite, hydrated } = useDua();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredDuas, setFilteredDuas] = useState([]);
@@ -71,7 +71,7 @@ const MyDuas = ({ navigation, isDarkMode, themeColors, language }) => {
               </Text>
             )}
           </View>
-          <TouchableOpacity onPress={() => onToggleFavorite(item)}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel={favorites[item.id] ? "Remove Dua from favorites" : "Favorite this Dua"} onPress={() => onToggleFavorite(item)}>
             <Ionicons 
               name={favorites[item.id] ? "star" : "star-outline"} 
               size={24} 
@@ -108,7 +108,7 @@ const MyDuas = ({ navigation, isDarkMode, themeColors, language }) => {
         keyExtractor={(item) => item?.id?.toString() || Math.random().toString()}
         ListEmptyComponent={
           <Text style={[styles.emptyText, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}>
-            No duas added yet. Add duas by favoriting them!
+            {!hydrated ? 'Loading saved Duas…' : searchQuery ? 'No saved Duas match your search.' : 'Your favorites, notes, and custom Duas will appear here.'}
           </Text>
         }
       />

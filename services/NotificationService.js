@@ -1,228 +1,147 @@
 import * as Notifications from 'expo-notifications';
-import * as BackgroundFetch from 'expo-background-fetch';
+import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Audio } from 'expo-av';
 import { Platform } from 'react-native';
+import { fetchPrayerDays } from './PrayerTimesService';
+import { androidPrayerAlarm, getAndroidAlarmStatus, nativeAlarm } from './AndroidPrayerAlarm';
+import { PRAYERS, SOUNDS, dateKey, buildPrayerNotifications } from '../utils/prayerNotifications';
 
-const BACKGROUND_NOTIFICATION_TASK = 'BACKGROUND_NOTIFICATION_TASK';
-const PRAYER_NOTIFICATION_CHANNEL = 'prayer-times';
+const REFRESH_TASK = 'refresh-prayer-notifications';
+const channelId = sound => `prayer-v57-${sound === false ? 'silent' : sound.replace(/\W/g, '-')}`;
 
-// Configure notification handler
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    priority: Notifications.AndroidNotificationPriority.MAX,
-  }),
-});
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({ handleNotification: async notification => ({
+    shouldShowBanner: true, shouldShowList: true, shouldSetBadge: false,
+    shouldPlaySound: notification.request.content.data?.silent !== true,
+  }) });
+  TaskManager.defineTask(REFRESH_TASK, async () => {
+    try {
+      const settings = JSON.parse(await AsyncStorage.getItem('prayerTimeSettings') || '{}');
+      if (!(settings.city && settings.country) && (settings.latitude == null || settings.longitude == null)) return BackgroundTask.BackgroundTaskResult.Success;
+      const cache = await fetchPrayerDays(settings);
+      const { preferences, reminders, enabled } = await loadNotificationPreferences();
+      await schedulePrayerNotifications(cache[dateKey(new Date(), Object.values(cache)[0]?._timeZone)], preferences, enabled, reminders, cache);
+      return BackgroundTask.BackgroundTaskResult.Success;
+    } catch (error) {
+      console.warn('Prayer notification refresh failed:', error);
+      return BackgroundTask.BackgroundTaskResult.Failed;
+    }
+  });
+}
 
-// Register background task
-TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error, executionInfo }) => {
-  if (error) {
-    console.error("Background task error:", error);
-    return;
-  }
-  
-  if (data.prayer && data.adhanPreference) {
-    await playAdhanSound(data.adhanPreference);
-  }
-});
-
-const createNotificationChannels = async () => {
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync(PRAYER_NOTIFICATION_CHANNEL, {
-      name: 'Prayer Times',
-      importance: Notifications.AndroidImportance.MAX,
-      enableVibrate: true,
-      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-      bypassDnd: true, // Add this to bypass Do Not Disturb
-      sound: true,
+async function createNotificationChannels() {
+  if (Platform.OS !== 'android') return;
+  for (const sound of [false, 'default', ...Object.values(SOUNDS)]) {
+    await Notifications.setNotificationChannelAsync(channelId(sound), {
+      name: sound === false ? 'Silent prayer reminders' : `Prayer reminders (${sound})`,
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: sound === false ? null : sound,
+      enableVibrate: sound !== false,
     });
   }
-};
+}
 
-const registerBackgroundTasks = async () => {
-  try {
-    await BackgroundFetch.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK, {
-      minimumInterval: 1, // 1 minute
-      stopOnTerminate: false,
-      startOnBoot: true,
-    });
-  } catch (err) {
-    console.error("Task registration failed:", err);
+export async function initializeNotifications() {
+  if (Platform.OS === 'web') return;
+  await createNotificationChannels();
+  if (await TaskManager.isAvailableAsync()) {
+    await BackgroundTask.registerTaskAsync(REFRESH_TASK, { minimumInterval: 60 });
   }
-};
+}
 
-const playAdhanSound = async (adhanPreference) => {
-  let soundFile;
-  switch (adhanPreference) {
-    case 'Adhan (Nureyn Mohammad)':
-      soundFile = require('../assets/adhan.mp3');
-      break;
-    case 'Adhan (Madina)':
-      soundFile = require('../assets/madinah_adhan.mp3');
-      break;
-    case 'Adhan (Makka)':
-      soundFile = require('../assets/makkah_adhan.mp3');
-      break;
-    case 'Long beep':
-      soundFile = require('../assets/long_beep.mp3');
-      break;
-    default:
-      return;
+export async function requestNotificationPermissions() {
+  if (Platform.OS === 'web') return false;
+  await createNotificationChannels();
+  let permission = await Notifications.getPermissionsAsync();
+  if (!permission.granted) permission = await Notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowSound: true, allowBadge: false } });
+  return permission.granted;
+}
+
+export async function loadNotificationPreferences() {
+  const preferences = JSON.parse(await AsyncStorage.getItem('adhanPreferences') || '{}');
+  const reminders = {};
+  for (const prayer of PRAYERS) {
+    preferences[prayer] = await AsyncStorage.getItem(`adhan_preference_${prayer}`) || preferences[prayer] || 'Adhan (Madina)';
+    reminders[prayer] = await AsyncStorage.getItem(`reminder_preference_${prayer}`) || 'None';
   }
+  const enabled = await AsyncStorage.getItem('playAdhan') !== 'false';
+  return { preferences, reminders, enabled };
+}
 
-  try {
-    const { sound } = await Audio.Sound.createAsync(soundFile, {
-      shouldPlay: true,
-      isLooping: false,
-    });
-    
-    await sound.setVolumeAsync(1.0);
-    await sound.playAsync();
-
-    // Cleanup
-    sound.setOnPlaybackStatusUpdate(async (status) => {
-      if (status.didJustFinish) {
-        await sound.unloadAsync();
-      }
-    });
-  } catch (error) {
-    console.error('Error playing adhan:', error);
+async function cancelScheduledNow() {
+  if (Platform.OS !== 'web') await Notifications.cancelAllScheduledNotificationsAsync();
+  if (androidPrayerAlarm) {
+    await androidPrayerAlarm.replaceSchedule('[]');
+    await androidPrayerAlarm.cancelTest();
+    await androidPrayerAlarm.stop();
   }
-};
+}
 
-const schedulePrayerNotifications = async (prayerTimes, adhanPreferences, playAdhan = true) => {
-  try {
-    // Cancel existing notifications
-    await cancelAllScheduledNotifications();
-
-    const prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
-    const now = new Date();
-    const newNotificationIds = [];
-
-    for (let prayer of prayers) {
-      if (!prayerTimes[prayer]) continue;
-
-      const [hours, minutes] = prayerTimes[prayer].split(':').map(Number);
-      let prayerDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
-      
-      // If prayer time has passed, schedule for next day
-      if (prayerDate <= now) {
-        prayerDate.setDate(prayerDate.getDate() + 1);
-      }
-
-      const adhanPreference = adhanPreferences[prayer];
-      if (!playAdhan || adhanPreference === 'None') {
-        continue;
-      }
-
-      const notificationId = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: `Time for ${prayer} Prayer`,
-          body: `It's time to pray ${prayer} (${prayerTimes[prayer]})`,
-          data: { prayer, adhanPreference },
-          sound: true,
-          priority: 'max',
-        },
-        trigger: {
-          date: prayerDate,
-          channelId: PRAYER_NOTIFICATION_CHANNEL,
-        },
-      });
-      
-      newNotificationIds.push(notificationId);
-    }
-
-    // Save new notification IDs
-    await AsyncStorage.setItem('scheduledNotificationIds', JSON.stringify(newNotificationIds));
-  } catch (error) {
-    console.error('Error scheduling notifications:', error);
-  }
-};
-
-const cancelAllScheduledNotifications = async () => {
-  try {
-    const existingIds = await AsyncStorage.getItem('scheduledNotificationIds');
-    if (existingIds) {
-      const ids = JSON.parse(existingIds);
-      for (let id of ids) {
-        await Notifications.cancelScheduledNotificationAsync(id);
-      }
-    }
-    await Notifications.cancelAllScheduledNotificationsAsync();
-  } catch (error) {
-    console.error('Error canceling notifications:', error);
-  }
-};
-
-const requestNotificationPermissions = async () => {
-  try {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync({
-        ios: {
-          allowAlert: true,
-          allowBadge: true,
-          allowSound: true,
-          allowAnnouncements: true,
-          allowCriticalAlerts: true, // Add this for critical alerts
-          provisional: false,
-        },
-      });
-      finalStatus = status;
-    }
-    
-    if (finalStatus !== 'granted') {
-      throw new Error('Permission not granted!');
-    }
-
+let scheduling = Promise.resolve();
+export function cancelAllScheduledNotifications() {
+  scheduling = scheduling.catch(() => {}).then(cancelScheduledNow);
+  return scheduling;
+}
+export function schedulePrayerNotifications(times, preferences, enabled = true, reminders = {}, cache) {
+  // Serialize preference changes so an older request cannot cancel a newer schedule.
+  scheduling = scheduling.catch(() => {}).then(async () => {
+    if (Platform.OS === 'web') return [];
+    const permission = await Notifications.getPermissionsAsync();
+    if (!enabled) { await cancelScheduledNow(); return []; }
+    if (!permission.granted) throw new Error('Allow notifications to receive prayer alerts.');
+    if (!times) return [];
+    const previous = await Notifications.getAllScheduledNotificationsAsync();
     await createNotificationChannels();
-    await registerBackgroundTasks();
-    
-    return finalStatus;
-  } catch (error) {
-    console.error('Error requesting notification permissions:', error);
-    return null;
-  }
-};
-
-const checkScheduledNotifications = async () => {
-  try {
-    const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
-    console.log('Currently scheduled notifications:', scheduledNotifications.length);
-    
-    // If no notifications are scheduled, try to reschedule them
-    if (scheduledNotifications.length === 0) {
-      const prayerTimes = await AsyncStorage.getItem('lastPrayerTimes');
-      const adhanPreferences = await AsyncStorage.getItem('adhanPreferences');
-      const playAdhan = await AsyncStorage.getItem('playAdhan');
-      
-      if (prayerTimes && adhanPreferences) {
-        await schedulePrayerNotifications(
-          JSON.parse(prayerTimes),
-          JSON.parse(adhanPreferences),
-          playAdhan === 'true'
-        );
-      }
+    const now = new Date();
+    const days = cache || { [dateKey(now, times._timeZone)]: times };
+    const requests = Object.entries(days).flatMap(([day, dayTimes]) =>
+      buildPrayerNotifications(dayTimes, preferences, reminders, now, new Date(`${day}T12:00:00`))
+    ).sort((a, b) => a.date - b.date).filter(item => item.date - now < 30 * 86400000).slice(0, Platform.OS === 'ios' ? 60 : 300);
+    if (Platform.OS === 'android') {
+      if (!androidPrayerAlarm) throw new Error('Install the new Android preview APK to enable Azan alarms.');
+      const count = await androidPrayerAlarm.replaceSchedule(JSON.stringify(requests.map(nativeAlarm)));
+      // Only remove the old Expo schedule after the native replacement is safely stored.
+      await Promise.all(previous.map(item => Notifications.cancelScheduledNotificationAsync(item.identifier)));
+      return Array.from({ length: count }, (_, i) => String(i));
     }
-    
-    return scheduledNotifications;
-  } catch (error) {
-    console.error('Error checking scheduled notifications:', error);
-    return [];
-  }
-};
+    const ids = [];
+    try { for (const item of requests) {
+      ids.push(await Notifications.scheduleNotificationAsync({
+        content: {
+          title: item.reminder ? `${item.prayer} Prayer Reminder` : `Time for ${item.prayer} Prayer`,
+          body: item.reminder ? `${item.prayer} prayer will be in ${item.reminder} minutes` : `It's time to pray ${item.prayer}`,
+          sound: item.sound,
+          data: { prayer: item.prayer, adhanPreference: item.preference, silent: item.sound === false },
+        },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: item.date, channelId: channelId(item.sound) },
+      }));
+    }
+    } catch (error) {
+      await Promise.all(ids.map(id => Notifications.cancelScheduledNotificationAsync(id)));
+      throw error;
+    }
+    await Promise.all(previous.map(item => Notifications.cancelScheduledNotificationAsync(item.identifier)));
+    return ids;
+  });
+  return scheduling;
+}
 
-export {
-  schedulePrayerNotifications,
-  cancelAllScheduledNotifications,
-  requestNotificationPermissions,
-  playAdhanSound,
-  BACKGROUND_NOTIFICATION_TASK,
-  checkScheduledNotifications,
-}; 
+export async function checkScheduledNotifications() {
+  if (Platform.OS === 'web') return [];
+  return Notifications.getAllScheduledNotificationsAsync();
+}
+
+export { getAndroidAlarmStatus };
+export async function scheduleAzanTest(prayer, preference) {
+  if (!(await requestNotificationPermissions())) throw new Error('Allow notifications first.');
+  if (preference === 'None') throw new Error('Choose a sound or Silent before testing.');
+  const item = { prayer, preference, sound: preference === 'Silent' ? false : SOUNDS[preference] || 'default', date: new Date(Date.now() + 15000), reminder: 0 };
+  if (Platform.OS === 'android') {
+    if (!androidPrayerAlarm) throw new Error('Install the new Android preview APK first.');
+    const alarm = { ...nativeAlarm(item), id: 'azan-preview-test', test: true };
+    await androidPrayerAlarm.scheduleTest(JSON.stringify(alarm));
+  } else if (Platform.OS === 'ios') {
+    await Notifications.scheduleNotificationAsync({ identifier: 'azan-preview-test', content: { title: `Azan test · ${prayer}`, body: preference, sound: item.sound }, trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: item.date } });
+  } else throw new Error('Scheduled Azan is available in the installed mobile app.');
+}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, StatusBar, TextInput, Alert, Animated, Dimensions, Modal } from 'react-native';
+import { View, Text, ScrollView, StyleSheet,  TouchableOpacity, StatusBar, TextInput, Alert, Animated, Dimensions, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
@@ -111,7 +112,6 @@ const DuaDetails = ({ route, navigation }) => {
   }, [dua.id, notes]);
 
   const handleToggleFavorite = () => {
-    console.log('handleToggleFavorite called');
     if (typeof onToggleFavorite === 'function') {
       onToggleFavorite(dua);
       setFavorite(!favorite);
@@ -157,7 +157,7 @@ const DuaDetails = ({ route, navigation }) => {
             <View style={styles.container}>
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
-                  <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to Duas" onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color={isDarkMode ? '#FFFFFF' : themeColors.textColor} />
                   </TouchableOpacity>
                   <Text style={[styles.duaCounter, { color: themeColors.accent }]}>
@@ -169,7 +169,7 @@ const DuaDetails = ({ route, navigation }) => {
                     (category?.titleAr || 'أدعيتي') : 
                     (category?.title || 'My Duas')}
                 </Text>
-                <TouchableOpacity onPress={handleToggleFavorite} style={styles.favoriteButton}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel={favorite ? "Remove Dua from favorites" : "Favorite this Dua"} onPress={handleToggleFavorite} style={styles.favoriteButton}>
                   <Ionicons name={favorite ? "star" : "star-outline"} size={24} color="#FFD700" />
                 </TouchableOpacity>
               </View>

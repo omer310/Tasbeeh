@@ -1,49 +1,35 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Image, Animated } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Image, Animated, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
+import { scheduleAzanTest, getAndroidAlarmStatus } from '../services/NotificationService';
+import { androidPrayerAlarm } from '../services/AndroidPrayerAlarm';
+import { playAudio } from '../services/AudioService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 
 const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPreferenceChange }) => {
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState(null);
   const [selectedAdhan, setSelectedAdhan] = useState('Adhan (Madina)');
   const [selectedReminder, setSelectedReminder] = useState('None');
   const [animation] = useState(new Animated.Value(0));
-  const [sound, setSound] = useState();
+  const sound = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingAdhan, setPlayingAdhan] = useState(null);
 
   useEffect(() => {
-    loadPreferences();
-  }, [prayer]);
-
-  const loadPreferences = async () => {
-    try {
-      const savedAdhan = await AsyncStorage.getItem(`adhan_preference_${prayer}`);
-      const savedReminder = await AsyncStorage.getItem(`reminder_preference_${prayer}`);
-      if (savedAdhan !== null) {
-        setSelectedAdhan(savedAdhan);
-      }
-      if (savedReminder !== null) {
-        setSelectedReminder(savedReminder);
-      }
-    } catch (error) {
-      console.error('Error loading preferences:', error);
-    }
-  };
-
-  const savePreferences = async (adhanPref, reminderPref) => {
-    try {
-      if (adhanPref) {
-        await AsyncStorage.setItem(`adhan_preference_${prayer}`, adhanPref);
-      }
-      if (reminderPref) {
-        await AsyncStorage.setItem(`reminder_preference_${prayer}`, reminderPref);
-      }
-    } catch (error) {
-      console.error('Error saving preferences:', error);
-    }
-  };
+    if (!isVisible || !prayer) return;
+    let active = true;
+    setMessage(''); setBusy(true);
+    Promise.all([
+      AsyncStorage.getItem(`adhan_preference_${prayer}`),
+      AsyncStorage.getItem(`reminder_preference_${prayer}`), getAndroidAlarmStatus(),
+    ]).then(([adhan, reminder, current]) => {
+      if (active) { setSelectedAdhan(adhan || 'Adhan (Madina)'); setSelectedReminder(reminder || 'None'); setStatus(current); }
+    }).catch(e => { if (active) setMessage(e.message); }).finally(() => { if (active) setBusy(false); });
+    return () => { active = false; };
+  }, [prayer, isVisible]);
 
   useEffect(() => {
     if (isVisible) {
@@ -57,7 +43,7 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPref
         useNativeDriver: true,
       }).start();
     }
-  }, [isVisible]);
+  }, [isVisible, animation]);
 
   const adhanOptions = [
     { name: 'None', icon: 'ban-outline' },
@@ -70,87 +56,60 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPref
   ];
 
   async function playSound(soundFile, adhanName) {
-    console.log("Attempting to play sound:", soundFile);
     try {
-      if (sound) {
-        await sound.unloadAsync();
-      }
-      const { sound: newSound } = await Audio.Sound.createAsync(soundFile, { shouldPlay: true });
-      setSound(newSound);
+      sound.current?.stop();
+      sound.current = playAudio(soundFile, () => {
+        sound.current = null;
+        setIsPlaying(false);
+        setPlayingAdhan(null);
+      }, adhanName);
       setIsPlaying(true);
       setPlayingAdhan(adhanName);
-      
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.didJustFinish) {
-          console.log("Playback finished");
-          setIsPlaying(false);
-          setPlayingAdhan(null);
-          newSound.unloadAsync();
-        }
-      });
-    } catch (error) {
-      console.error("Error playing sound:", error);
-    }
-  }
-
-  async function pauseSound() {
-    if (sound) {
-      await sound.pauseAsync();
+    } catch {
       setIsPlaying(false);
-    }
-  }
-
-  async function stopAndPlayFromStart(soundFile, adhanName) {
-    if (sound) {
-      await sound.unloadAsync();
-    }
-    playSound(soundFile, adhanName);
-  }
-
-  useEffect(() => {
-    return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
-    };
-  }, [sound]);
-
-  useEffect(() => {
-    if (!isVisible && sound) {
-      pauseSound();
       setPlayingAdhan(null);
+      setMessage('Unable to preview this sound. Please try again.');
     }
+  }
+
+  function pauseSound() {
+    sound.current?.pause();
+    setIsPlaying(false);
+  }
+
+  function stopAndPlayFromStart(soundFile, adhanName) { playSound(soundFile, adhanName); }
+
+  useEffect(() => () => { sound.current?.stop(); }, []);
+  useEffect(() => {
+    if (!isVisible) { sound.current?.stop(); sound.current = null; setIsPlaying(false); setPlayingAdhan(null); }
   }, [isVisible]);
 
   const handleClose = () => {
-    if (sound) {
-      pauseSound();
-      setPlayingAdhan(null);
-    }
-    onClose();
+    sound.current?.stop(); sound.current = null;
+    setIsPlaying(false); setPlayingAdhan(null); onClose();
   };
 
-  const handleReminderSelection = (option) => {
-    setSelectedReminder(option.name);
-    savePreferences(null, option.name);
-    onPreferenceChange(prayer, selectedAdhan, option.name);
+  const saveSelection = async (adhan, reminder) => {
+    if (busy) return;
+    setBusy(true); setMessage('');
+    sound.current?.stop(); sound.current = null; setIsPlaying(false); setPlayingAdhan(null);
+    try {
+      await onPreferenceChange(prayer, adhan, reminder);
+      setSelectedAdhan(adhan); setSelectedReminder(reminder);
+      setStatus(await getAndroidAlarmStatus());
+    } catch (e) { setMessage(e.message || 'Could not save this preference.'); }
+    finally { setBusy(false); }
   };
-
-  const handleAdhanSelection = async (option) => {
-    setSelectedAdhan(option.name);
-    await savePreferences(option.name, null);
-    
-    // Stop any playing sound when changing preference
-    if (sound) {
-      await sound.unloadAsync();
-      setIsPlaying(false);
-      setPlayingAdhan(null);
-    }
-    
-    // Immediately schedule the notification with new preferences
-    if (typeof onPreferenceChange === 'function') {
-      onPreferenceChange(prayer, option.name);
-    }
+  const handleReminderSelection = option => saveSelection(selectedAdhan, option.name);
+  const handleAdhanSelection = option => saveSelection(option.name, selectedReminder);
+  const testDelivery = async () => {
+    setMessage(''); setBusy(true);
+    sound.current?.stop(); sound.current = null; setIsPlaying(false);
+    try {
+      await scheduleAzanTest(prayer, selectedAdhan);
+      setMessage('Test scheduled in 15 seconds. Lock your screen now. Use Stop Azan on the notification to end playback.');
+    } catch (e) { setMessage(e.message); }
+    finally { setBusy(false); setStatus(await getAndroidAlarmStatus()); }
   };
 
   const reminderOptions = [
@@ -175,6 +134,7 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPref
         }
       ]}>
         <Picker
+          enabled={!busy}
           selectedValue={selectedValue}
           onValueChange={onValueChange}
           dropdownIconColor={themeColors.textColor}
@@ -219,13 +179,22 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPref
           ]}
         >
           <View style={styles.header}>
-            <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close Azan settings" style={styles.closeButton} onPress={handleClose}>
               <Ionicons name="close" size={24} color={themeColors.textColor} />
             </TouchableOpacity>
             <Text style={[styles.modalTitle, { color: themeColors.textColor }]}>{prayer}</Text>
           </View>
           <View style={[styles.separator, { backgroundColor: themeColors.separatorColor }]} />
           
+          {Platform.OS !== 'web' && <View style={{ gap: 8, marginBottom: 12 }}>
+            <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={testDelivery} style={{ padding: 12, borderRadius: 10, backgroundColor: themeColors.inputBackground }}>
+              <Text style={{ color: themeColors.activeTabColor, fontWeight: '600' }}>Test with screen locked (15 seconds)</Text>
+            </TouchableOpacity>
+            {status && !status.exact && <TouchableOpacity accessibilityRole="button" onPress={() => androidPrayerAlarm?.openAlarmSettings()}><Text style={{ color: themeColors.activeTabColor }}>Allow Alarms & reminders for on-time Azan</Text></TouchableOpacity>}
+            <Text style={{ color: themeColors.secondaryTextColor, fontSize: 12 }}>Uses notification volume. Silent mode and Do Not Disturb mute Azan.</Text>
+            {status?.lastEvent && <Text style={{ color: themeColors.secondaryTextColor, fontSize: 12 }}>{status.lastEvent}</Text>}
+          </View>}
+          {!!message && <Text accessibilityRole="alert" style={{ color: themeColors.textColor, marginBottom: 12 }}>{message}</Text>}
           {/* Pre-Adhan Reminder Dropdown */}
           {renderReminderDropdown(
             reminderOptions,
@@ -240,6 +209,7 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPref
             {adhanOptions.map((option, index) => (
               <TouchableOpacity
                 key={index}
+                accessibilityRole="radio" accessibilityState={{ checked: selectedAdhan === option.name }} accessibilityLabel={option.name} disabled={busy}
                 style={[
                   styles.optionItem,
                   selectedAdhan === option.name && styles.selectedOption,
@@ -267,7 +237,7 @@ const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPref
                     <Ionicons name="checkmark-circle" size={24} color={themeColors.activeTabColor} />
                   ) : null}
                   {option.sound && (
-                    <TouchableOpacity 
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Preview ${option.name}`}
                       onPress={() => {
                         if (playingAdhan === option.name && isPlaying) {
                           pauseSound();

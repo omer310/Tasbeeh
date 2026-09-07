@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Switch, TouchableOpacity, Modal, FlatList, TextInput, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Switch, TouchableOpacity, Modal, FlatList, TextInput, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -39,7 +39,7 @@ const calculationMethods = [
 
 const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange }) => {
   const [showImsak, setShowImsak] = useState(false);
-  const [autoDetectLocation, setAutoDetectLocation] = useState(true);
+  const [autoDetectLocation, setAutoDetectLocation] = useState(Platform.OS !== 'web');
   const [automaticSettings, setAutomaticSettings] = useState(true);
   const [location, setLocation] = useState('');
   const [showLocationPicker, setShowLocationPicker] = useState(false);
@@ -63,7 +63,7 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
 
   useEffect(() => {
     loadSettings();
-    handleInitialLocation();
+    if (Platform.OS !== 'web') handleInitialLocation();
   }, []);
 
   const handleInitialLocation = async () => {
@@ -87,7 +87,7 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
       const savedCountry = await AsyncStorage.getItem('country');
 
       setShowImsak(savedShowImsak === 'true');
-      setAutoDetectLocation(savedAutoDetect !== 'false');
+      setAutoDetectLocation(savedAutoDetect == null ? Platform.OS !== 'web' : savedAutoDetect !== 'false');
       setAutomaticSettings(savedAutoSettings !== 'false');
       if (savedLocation) setLocation(savedLocation);
       if (savedMethod) setCalculationMethod(savedMethod);
@@ -109,8 +109,8 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
       await AsyncStorage.setItem('location', location);
       await AsyncStorage.setItem('calculationMethod', calculationMethod);
       await AsyncStorage.setItem('calculationMethodId', calculationMethodId.toString());
-      await AsyncStorage.setItem('latitude', latitude ? latitude.toString() : '');
-      await AsyncStorage.setItem('longitude', longitude ? longitude.toString() : '');
+      await AsyncStorage.setItem('latitude', latitude != null ? latitude.toString() : '');
+      await AsyncStorage.setItem('longitude', longitude != null ? longitude.toString() : '');
       await AsyncStorage.setItem('city', city);
       await AsyncStorage.setItem('country', country);
       await AsyncStorage.setItem('madhhabMethod', madhhabMethod.toString());
@@ -146,6 +146,8 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
 
   const handleManualLocationSelect = (selectedCountry) => {
     const countryCode = countries.find(c => c.name === selectedCountry)?.code;
+    setAutoDetectLocation(false);
+    setLatitude(null); setLongitude(null);
     setCountry(selectedCountry);
     setLocation(selectedCountry);
     setShowLocationPicker(false);
@@ -252,7 +254,7 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
       onPress={() => handlePrayerPress(prayer)}
     >
       <View style={styles.prayerInfoContainer}>
-        <PrayerIcons prayer={prayer} color={themeColors.textColor} />
+        <Ionicons name="time-outline" size={24} color={themeColors.textColor} />
         <Text style={[styles.prayerName, { color: themeColors.textColor }]}>{prayer}</Text>
       </View>
       <View style={styles.timeContainer}>
@@ -278,7 +280,7 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
     
     if (!automaticSettings) {
       onSettingsChange({
-        ...settings,
+        showImsak, autoDetectLocation, automaticSettings, location, latitude, longitude,
         calculationMethod: method.name,
         calculationMethodId: method.id,
       });
@@ -323,6 +325,15 @@ const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange 
             <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>Location</Text>
             <Text style={[styles.settingValue, { color: themeColors.secondaryTextColor }]}>{location}</Text>
           </TouchableOpacity>
+
+          {!autoDetectLocation && (
+            <View style={styles.settingItem}>
+              <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>City</Text>
+              <TextInput accessibilityLabel="City" placeholder="Enter your city" value={city}
+                onChangeText={setCity} style={[styles.settingValue, { color: themeColors.textColor, minWidth: 150 }]}
+                placeholderTextColor={themeColors.secondaryTextColor} />
+            </View>
+          )}
 
           <View style={styles.settingItem}>
             <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>Auto-detect Location</Text>

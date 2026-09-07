@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Image, View, TouchableOpacity, ScrollView, I18nManager, Text, Animated, useColorScheme } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Font from 'expo-font';
-import { SafeAreaView, Platform, StatusBar } from 'react-native';
+import { Platform, StatusBar } from 'react-native';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Dimensions } from 'react-native';
 import TasbeehCounter from './components/TasbeehCounter';
 import PrayerTimes from './components/PrayerTimes';
@@ -19,84 +21,48 @@ import Duas from './components/Duas';
 import DuaList from './components/DuaList';
 import DuaDetails from './components/DuaDetails';
 import AddCustomDua from './components/AddCustomDua';
-import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import Constants from 'expo-constants';
-import * as BackgroundFetch from 'expo-background-fetch';
-import * as TaskManager from 'expo-task-manager';
 import ErrorBoundary from './components/ErrorBoundary';
-import { Audio } from 'expo-av';
-import { BACKGROUND_NOTIFICATION_TASK } from './constants/NotificationConstants';
 import Onboarding from './components/Onboarding';
 import SplashScreen from './components/SplashScreen';
 import MyDuas from './components/MyDuas';
-import { DuaContext, DuaProvider } from './contexts/DuaContext';
+import { DuaProvider } from './contexts/DuaContext';
 
 const Tab = createBottomTabNavigator();
 const DuasStack = createStackNavigator();
 const Stack = createStackNavigator();
 
-const BACKGROUND_FETCH_TASK = 'background-fetch-task';
+import { initializeNotifications, requestNotificationPermissions } from './services/NotificationService';
+import { configureAudio } from './services/AudioService';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => {
-    const adhanPreferences = await AsyncStorage.getItem('adhanPreferences');
-    return {
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      priority: Notifications.AndroidImportance.MAX,
-    };
-  },
-});
-
+const DUA_SCREENS = { DuasHome: Duas, DuaList, MyDuas, DuaDetails, AddCustomDua };
 function DuasStackScreen({ themeColors, language }) {
-  const { myDuas, favorites, onToggleFavorite, onAddNote, onAddToCollection } = 
-    React.useContext(DuaContext);
+  return <DuasStack.Navigator screenOptions={{ headerShown: false }}>
+    {Object.entries(DUA_SCREENS).map(([name, Component]) => <DuasStack.Screen key={name} name={name}>
+      {props => <Component {...props} themeColors={themeColors} language={language} isDarkMode={themeColors.isDark}
+        route={{ ...props.route, params: { ...props.route.params, themeColors, language, isDarkMode: themeColors.isDark } }} />}
+    </DuasStack.Screen>)}
+  </DuasStack.Navigator>;
+}
 
+function TabBarButton({ route, options, isFocused, navigation, themeColors }) {
+  const animatedValue = useRef(new Animated.Value(1)).current;
+  const onPress = () => {
+    const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+    if (!isFocused && !event.defaultPrevented) navigation.navigate(route.name);
+    Animated.sequence([
+      Animated.timing(animatedValue, { toValue: 0.8, duration: 100, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(animatedValue, { toValue: 1, duration: 100, useNativeDriver: Platform.OS !== 'web' }),
+    ]).start();
+  };
   return (
-    <DuasStack.Navigator screenOptions={{ headerShown: false }}>
-      <DuasStack.Screen 
-        name="DuasHome" 
-        component={Duas} 
-        initialParams={{ 
-          themeColors, 
-          language
-        }} 
-      />
-      <DuasStack.Screen 
-        name="DuaList" 
-        component={DuaList} 
-        initialParams={{ 
-          themeColors, 
-          language
-        }} 
-      />
-      <DuasStack.Screen 
-        name="MyDuas" 
-        component={MyDuas} 
-        initialParams={{ 
-          themeColors, 
-          language
-        }} 
-      />
-      <DuasStack.Screen 
-        name="DuaDetails" 
-        component={DuaDetails} 
-        initialParams={{ 
-          themeColors, 
-          language
-        }} 
-      />
-      <DuasStack.Screen 
-        name="AddCustomDua" 
-        component={AddCustomDua} 
-        initialParams={{ 
-          themeColors, 
-          language 
-        }} 
-      />
-    </DuasStack.Navigator>
+    <TouchableOpacity accessibilityRole="button" accessibilityLabel={route.name}
+      accessibilityState={{ selected: isFocused }} onPress={onPress} style={styles.tabItem}>
+      <Animated.View style={[styles.iconContainer, isFocused && styles.activeIconContainer,
+        { transform: [{ scale: animatedValue }] }]}>
+        {options.tabBarIcon({ focused: isFocused, color: isFocused ? themeColors.activeTabColor : 'gray', size: 24 })}
+      </Animated.View>
+    </TouchableOpacity>
   );
 }
 
@@ -104,86 +70,17 @@ function CustomTabBar({ state, descriptors, navigation, themeColors }) {
   return (
     <View style={styles.tabBarContainer}>
       <View style={[styles.tabBar, { backgroundColor: themeColors.tabBarColor }]}>
-        {state.routes.map((route, index) => {
-          const { options } = descriptors[route.key];
-          const label =
-            options.tabBarLabel !== undefined
-              ? options.tabBarLabel
-              : options.title !== undefined
-              ? options.title
-              : route.name;
-
-          const isFocused = state.index === index;
-
-          const animatedValue = useRef(new Animated.Value(1)).current;
-
-          const onPress = () => {
-            const event = navigation.emit({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            });
-
-            if (!isFocused && !event.defaultPrevented) {
-              navigation.reset({
-                index: 0,
-                routes: [{ name: route.name }],
-              });
-            } else if (isFocused) {
-              navigation.dispatch({
-                ...navigation.navigate(route.name),
-                target: state.key,
-              });
-            }
-
-            Animated.sequence([
-              Animated.timing(animatedValue, {
-                toValue: 0.8,
-                duration: 100,
-                useNativeDriver: true,
-              }),
-              Animated.timing(animatedValue, {
-                toValue: 1,
-                duration: 100,
-                useNativeDriver: true,
-              }),
-            ]).start();
-          };
-
-          return (
-            <TouchableOpacity
-              key={index}
-              accessibilityRole="button"
-              accessibilityState={isFocused ? { selected: true } : {}}
-              accessibilityLabel={options.tabBarAccessibilityLabel}
-              testID={options.tabBarTestID}
-              onPress={onPress}
-              style={styles.tabItem}
-            >
-              <Animated.View 
-                style={[
-                  styles.iconContainer,
-                  isFocused && styles.activeIconContainer,
-                  { transform: [{ scale: animatedValue }] }
-                ]}
-              >
-                {options.tabBarIcon({ 
-                  focused: isFocused, 
-                  color: isFocused ? themeColors.activeTabColor : 'gray', 
-                  size: 24 
-                })}
-              </Animated.View>
-            </TouchableOpacity>
-          );
-        })}
+        {state.routes.map((route, index) => (
+          <TabBarButton key={route.key} route={route} options={descriptors[route.key].options}
+            isFocused={state.index === index} navigation={navigation} themeColors={themeColors} />
+        ))}
       </View>
     </View>
   );
 }
 
 function ScreenWrapper({ children, style, themeColors }) {
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === 'dark';
+  const isDarkMode = themeColors.isDark;
   
   return (
     <SafeAreaView 
@@ -282,7 +179,7 @@ function MainAppContent({
                 {...props} 
                 themeColors={themeColors} 
                 language={language}
-                registerForPushNotificationsAsync={registerForPushNotificationsAsync}
+                registerForPushNotificationsAsync={requestNotificationPermissions}
                 isDarkMode={darkMode}
               />
             </View>
@@ -312,7 +209,7 @@ function MainAppContent({
           )}
         </Tab.Screen>
         <Tab.Screen name="Qibla">
-          {(props) => <QiblaDirection isDarkMode={darkMode} language={language} />}
+          {(props) => <QiblaDirection themeColors={themeColors} isDarkMode={darkMode} language={language} />}
         </Tab.Screen>
         <Tab.Screen name="Calendar">
           {(props) => (
@@ -349,135 +246,6 @@ function MainAppContent({
   );
 }
 
-async function schedulePrayerNotifications(prayerTimes) {
-  for (const [prayer, time] of Object.entries(prayerTimes)) {
-    const trigger = new Date(time);
-    
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: `Time for ${prayer} prayer`,
-        body: 'It\'s time to pray',
-        sound: 'adhan.mp3',
-      },
-      trigger,
-    });
-  }
-}
-
-TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
-  const now = new Date();
-  const prayerTimes = await fetchPrayerTimes(now);
-  await schedulePrayerNotifications(prayerTimes);
-  return BackgroundFetch.Result.NewData;
-});
-
-async function registerBackgroundFetchAsync() {
-  return BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
-    minimumInterval: 60 * 15,
-    stopOnTerminate: false,
-    startOnBoot: true,
-  });
-}
-
-const registerForPushNotificationsAsync = async () => {
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-  if (finalStatus !== 'granted') {
-    alert('Failed to get push token for push notification!');
-    return;
-  }
-};
-
-TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => {
-  if (error) return;
-
-  const { prayer, adhanPreference } = data;
-  if (!adhanPreference || adhanPreference === 'None') return;
-
-  try {
-    // For silent notifications, just show the notification without sound
-    if (adhanPreference === 'Silent') {
-      return;
-    }
-
-    // For default notification sound, the system will handle it
-    if (adhanPreference === 'Default notification sound') {
-      return;
-    }
-
-    // For custom adhans, play the sound in background
-    let soundFile;
-    switch (adhanPreference) {
-      case 'Adhan (Nureyn Mohammad)':
-        soundFile = require('./assets/adhan.mp3');
-        break;
-      case 'Adhan (Madina)':
-        soundFile = require('./assets/madinah_adhan.mp3');
-        break;
-      case 'Adhan (Makka)':
-        soundFile = require('./assets/makkah_adhan.mp3');
-        break;
-      case 'Long beep':
-        soundFile = require('./assets/long_beep.mp3');
-        break;
-      default:
-        return;
-    }
-
-    const { sound } = await Audio.Sound.createAsync(soundFile, {
-      shouldPlay: true,
-      isLooping: false,
-      volume: 1.0,
-      staysActiveInBackground: true,
-    });
-
-    // Keep track of the sound object globally
-    global.currentAdhanSound = sound;
-
-    // Clean up after playback
-    sound.setOnPlaybackStatusUpdate(async (status) => {
-      if (status.didJustFinish) {
-        await sound.unloadAsync();
-        delete global.currentAdhanSound;
-      }
-    });
-  } catch (error) {
-    console.error("Error playing adhan:", error);
-  }
-});
-
-// Configure audio for background playback
-Audio.setAudioModeAsync({
-  staysActiveInBackground: true,
-  shouldDuckAndroid: true,
-  playThroughEarpieceAndroid: false,
-  allowsRecordingIOS: false,
-  playsInSilentModeIOS: true,
-});
-
-const setupNotificationChannels = async () => {
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('prayer-times', {
-      name: 'Prayer Times',
-      importance: Notifications.AndroidImportance.MAX,
-      enableVibrate: true,
-      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-      bypassDnd: true,
-    });
-
-    await Notifications.setNotificationChannelAsync('prayer-reminders', {
-      name: 'Prayer Reminders',
-      importance: Notifications.AndroidImportance.HIGH,
-      enableVibrate: true,
-      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-    });
-  }
-};
-
 const AppStatusBar = ({ darkMode }) => (
   <StatusBar 
     barStyle={darkMode ? 'light-content' : 'dark-content'}
@@ -486,7 +254,7 @@ const AppStatusBar = ({ darkMode }) => (
   />
 );
 
-export default function App() {
+function AppContent() {
   const [darkMode, setDarkMode] = useState(false);
   const [theme, setTheme] = useState('default');
   const [fontsLoaded, setFontsLoaded] = useState(false);
@@ -500,9 +268,6 @@ export default function App() {
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
-  const [myDuas, setMyDuas] = useState([]);
-  const [favorites, setFavorites] = useState({});
-  const [notes, setNotes] = useState({});
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -511,12 +276,13 @@ export default function App() {
         await loadSettings();
         await loadFonts();
         await setupLanguage();
-        await registerForPushNotificationsAsync();
+        configureAudio().catch(error => console.warn('Audio setup:', error));
         
         // Check onboarding status
         const status = await AsyncStorage.getItem('hasCompletedOnboarding');
         setHasCompletedOnboarding(status === 'true');
 
+        if (Platform.OS !== 'web') {
         // Setup notifications
         notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
           setNotification(notification);
@@ -526,7 +292,8 @@ export default function App() {
           console.log(response);
         });
 
-        await registerBackgroundFetchAsync();
+        }
+        initializeNotifications().catch(error => console.warn('Notification setup:', error));
         
         // Add a small delay to ensure smooth transition
         setTimeout(() => {
@@ -541,42 +308,10 @@ export default function App() {
     initializeApp();
 
     return () => {
-      Notifications.removeNotificationSubscription(notificationListener.current);
-      Notifications.removeNotificationSubscription(responseListener.current);
+      notificationListener.current?.remove();
+      responseListener.current?.remove();
     };
   }, []);
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const savedMyDuas = await AsyncStorage.getItem('myDuas');
-        const savedFavorites = await AsyncStorage.getItem('favorites');
-        const savedNotes = await AsyncStorage.getItem('notes');
-        
-        if (savedMyDuas) setMyDuas(JSON.parse(savedMyDuas));
-        if (savedFavorites) setFavorites(JSON.parse(savedFavorites));
-        if (savedNotes) setNotes(JSON.parse(savedNotes));
-      } catch (error) {
-        console.error('Error loading data:', error);
-      }
-    };
-    
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    const saveData = async () => {
-      try {
-        await AsyncStorage.setItem('myDuas', JSON.stringify(myDuas));
-        await AsyncStorage.setItem('favorites', JSON.stringify(favorites));
-        await AsyncStorage.setItem('notes', JSON.stringify(notes));
-      } catch (error) {
-        console.error('Error saving data:', error);
-      }
-    };
-    
-    saveData();
-  }, [myDuas, favorites, notes]);
 
   const setupLanguage = async () => {
     const savedLanguage = await AsyncStorage.getItem('language');
@@ -639,7 +374,10 @@ export default function App() {
     tabBarColor: darkMode ? '#2E2E2E' : '#FFFFFF',
     activeTabColor: '#4CAF50',
     primary: '#4CAF50',
+    primaryColor: '#4CAF50',
+    cardColor: darkMode ? '#28312F' : '#FFFFFF',
     accent: '#81C784',
+    errorColor: darkMode ? '#ff8a80' : '#b71c1c',
     fontFamily: selectedFont,
     gradientStart: '#4CAF50',
     gradientEnd: '#2E7D32',
@@ -661,75 +399,6 @@ export default function App() {
     }
   };
 
-  const handleToggleFavorite = (dua) => {
-    setFavorites(prev => {
-      const newFavorites = { ...prev };
-      if (newFavorites[dua.id]) {
-        delete newFavorites[dua.id];
-        // Remove from myDuas if unfavorited
-        setMyDuas(current => current.filter(d => d.id !== dua.id));
-      } else {
-        newFavorites[dua.id] = true;
-        // Add to myDuas if favorited
-        setMyDuas(current => {
-          if (!current.find(d => d.id === dua.id)) {
-            return [...current, { ...dua, parentCategory: dua.category }];
-          }
-          return current;
-        });
-      }
-      return newFavorites;
-    });
-  };
-
-  const handleAddNote = (duaId, note) => {
-    setNotes(prev => ({
-      ...prev,
-      [duaId]: note
-    }));
-    
-    // Update the note in myDuas and add the dua if it's not already there
-    setMyDuas(current => {
-      const existingDua = current.find(dua => dua.id === duaId);
-      if (existingDua) {
-        // Update existing dua
-        return current.map(dua => 
-          dua.id === duaId 
-            ? { ...dua, note } 
-            : dua
-        );
-      } else {
-        // Find the dua in the category and add it with the note
-        const dua = category.subcategories.find(d => d.id === duaId);
-        if (dua) {
-          return [...current, { ...dua, note, parentCategory: category }];
-        }
-        return current;
-      }
-    });
-  };
-
-  const handleAddToCollection = (dua) => {
-    setMyDuas(current => {
-      const existingDua = current.find(d => d.id === dua.id);
-      if (!existingDua) {
-        // Add the dua with its category information
-        return [...current, { 
-          ...dua, 
-          parentCategory: dua.category || category, // Use the dua's category or current category
-          addedToCollection: true 
-        }];
-      }
-      return current;
-    });
-
-    // Also mark it as favorite
-    setFavorites(prev => ({
-      ...prev,
-      [dua.id]: true
-    }));
-  };
-
   if (!fontsLoaded || isLoading) {
     return <SplashScreen isDarkMode={darkMode} />;
   }
@@ -743,7 +412,7 @@ export default function App() {
 
   return (
     <DuaProvider>
-      <NavigationContainer>
+      <NavigationContainer theme={{ ...(darkMode ? DarkTheme : DefaultTheme), colors: { ...(darkMode ? DarkTheme : DefaultTheme).colors, background: themeColors.backgroundColor, card: themeColors.cardColor, text: themeColors.textColor, primary: themeColors.primary } }}>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="MainApp">
             {() => (
@@ -833,3 +502,10 @@ const styles = StyleSheet.create({
     padding: 8,
   },
 });
+export default function App() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider><ErrorBoundary><AppContent /></ErrorBoundary></SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
