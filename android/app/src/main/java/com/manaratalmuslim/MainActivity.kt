@@ -3,6 +3,9 @@ import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
 import android.os.Bundle
+import android.content.Intent
+import android.view.KeyEvent
+import expo.modules.prayeralarm.AzanPlaybackService
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -12,6 +15,13 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
+  override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+    if (event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN && AzanPlaybackService.isRunning) {
+      if (event.action == KeyEvent.ACTION_DOWN) stopService(Intent(this, AzanPlaybackService::class.java))
+      return true
+    }
+    return super.dispatchKeyEvent(event)
+  }
   override fun onCreate(savedInstanceState: Bundle?) {
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.

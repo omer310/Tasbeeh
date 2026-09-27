@@ -107,9 +107,14 @@ android {
     }
     buildTypes {
         debug {
+// @generated begin manarat-android-development-app - expo prebuild (DO NOT MODIFY) sync-3dccdb84515d2105c34ee90ca7db6b2bf39e836a
+            applicationIdSuffix ".dev"
+// @generated end manarat-android-development-app
             signingConfig signingConfigs.debug
         }
         release {
+            // Allow a locally signed release build to coexist with the installed app.
+            if (findProperty('manaratStandalonePreview') == 'true') applicationIdSuffix ".dev"
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
             signingConfig signingConfigs.debug

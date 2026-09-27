@@ -38,7 +38,7 @@ const InstructionsModal = ({ visible, onClose, language = 'en', themeColors }) =
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <View style={[styles.modalContent, { backgroundColor: themeColors?.cardColor || 'white' }]}>
           <Text style={[styles.modalTitle, { color: themeColors?.textColor || '#064e3b' }]}>
             {getTranslatedText('instructions')}
           </Text>
@@ -48,21 +48,21 @@ const InstructionsModal = ({ visible, onClose, language = 'en', themeColors }) =
               <View style={[styles.stepNumber, { backgroundColor: themeColors?.primaryColor || '#059669' }]}>
                 <Text style={styles.stepNumberText}>1</Text>
               </View>
-              <Text style={styles.stepText}>{getTranslatedText('step1')}</Text>
+              <Text style={[styles.stepText, { color: themeColors?.textColor }]}>{getTranslatedText('step1')}</Text>
             </View>
 
             <View style={styles.step}>
               <View style={[styles.stepNumber, { backgroundColor: themeColors?.primaryColor || '#059669' }]}>
                 <Text style={styles.stepNumberText}>2</Text>
               </View>
-              <Text style={styles.stepText}>{getTranslatedText('step2')}</Text>
+              <Text style={[styles.stepText, { color: themeColors?.textColor }]}>{getTranslatedText('step2')}</Text>
             </View>
 
             <View style={styles.step}>
               <View style={[styles.stepNumber, { backgroundColor: themeColors?.primaryColor || '#059669' }]}>
                 <Text style={styles.stepNumberText}>3</Text>
               </View>
-              <Text style={styles.stepText}>{getTranslatedText('step3')}</Text>
+              <Text style={[styles.stepText, { color: themeColors?.textColor }]}>{getTranslatedText('step3')}</Text>
             </View>
           </View>
 
@@ -83,7 +83,7 @@ const InstructionsModal = ({ visible, onClose, language = 'en', themeColors }) =
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -152,4 +152,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default InstructionsModal; 
+export default InstructionsModal;

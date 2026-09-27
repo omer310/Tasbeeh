@@ -18,6 +18,13 @@ function duaReducer(state, action) {
     case 'note': return { ...state, notes: { ...state.notes, [action.dua.id]: action.note }, myDuas: upsert({ ...action.dua, note: action.note }) };
     case 'collect': return { ...state, myDuas: upsert({ ...action.dua, addedToCollection: true }) };
     case 'custom': return { ...state, myDuas: upsert({ ...action.dua, isCustom: true }) };
+    case 'deleteCustom': {
+      if (!state.myDuas.some(dua => dua.id === action.id && dua.isCustom)) return state;
+      const favorites = { ...state.favorites }, notes = { ...state.notes };
+      delete favorites[action.id];
+      delete notes[action.id];
+      return { ...state, myDuas: state.myDuas.filter(dua => dua.id !== action.id), favorites, notes };
+    }
     default: return state;
   }
 }

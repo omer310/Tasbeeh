@@ -1,173 +1,34 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Dimensions } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useDua } from '../contexts/DuaContext';
+import useDeleteCustomDua from '../hooks/useDeleteCustomDua';
 
-const MyDuas = ({ navigation, isDarkMode, themeColors, language }) => {
-  const { myDuas, favorites, notes, onToggleFavorite, hydrated } = useDua();
-  
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filteredDuas, setFilteredDuas] = useState([]);
-
-  useEffect(() => {
-    if (myDuas && myDuas.length > 0) {
-      const filtered = myDuas.filter(dua => {
-        const title = dua.title?.toLowerCase() || '';
-        const titleAr = dua.titleAr || '';
-        const arabic = dua.arabic || '';
-        const transliteration = dua.transliteration?.toLowerCase() || '';
-        const translation = dua.translation?.toLowerCase() || '';
-        const duaNote = notes[dua.id]?.toLowerCase() || '';
-        const query = searchQuery.toLowerCase();
-
-        return (
-          title.includes(query) ||
-          titleAr.includes(searchQuery) ||
-          arabic.includes(searchQuery) ||
-          transliteration.includes(query) ||
-          translation.includes(query) ||
-          duaNote.includes(query)
-        );
-      });
-      setFilteredDuas(filtered);
-    } else {
-      setFilteredDuas([]);
-    }
-  }, [searchQuery, myDuas, notes]);
-
-  const renderDuaItem = ({ item, index }) => {
-    if (!item || !item.id) return null;
-
-    const duaNote = notes[item.id] || item.note;
-    const title = language === 'ar' ? (item.titleAr || '') : (item.title || '');
-    const parentCategory = item.parentCategory ? 
-      (language === 'ar' ? item.parentCategory.titleAr : item.parentCategory.title) : '';
-
-    return (
-      <TouchableOpacity
-        style={[
-          styles.duaItem,
-          { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#FFFFFF' }
-        ]}
-        onPress={() => navigation.navigate('DuaDetails', { 
-          dua: item, 
-          category: null,
-          index: index,
-          isDarkMode, 
-          themeColors, 
-          language,
-          isFavorite: favorites[item.id] || false
-        })}
-      >
-        <View style={styles.duaItemContent}>
-          <View style={styles.duaTitleContainer}>
-            <Text style={[styles.duaTitle, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}>
-              {title}
-            </Text>
-            {parentCategory && (
-              <Text style={[styles.parentCategory, { color: isDarkMode ? '#BBBBBB' : themeColors.secondaryTextColor }]}>
-                {parentCategory}
-              </Text>
-            )}
-          </View>
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel={favorites[item.id] ? "Remove Dua from favorites" : "Favorite this Dua"} onPress={() => onToggleFavorite(item)}>
-            <Ionicons 
-              name={favorites[item.id] ? "star" : "star-outline"} 
-              size={24} 
-              color={favorites[item.id] ? "#FFD700" : (isDarkMode ? '#FFFFFF' : themeColors.textColor)} 
-            />
-          </TouchableOpacity>
-        </View>
-        {duaNote && (
-          <Text style={[styles.duaNote, { color: isDarkMode ? '#BBBBBB' : themeColors.secondaryTextColor }]}>
-            Note: {duaNote}
-          </Text>
-        )}
-      </TouchableOpacity>
-    );
-  };
-
-  return (
-    <GestureHandlerRootView style={styles.container}>
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={[styles.searchInput, { 
-            color: isDarkMode ? '#FFFFFF' : themeColors.textColor,
-            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5',
-          }]}
-          placeholder="Search My Duas"
-          placeholderTextColor={isDarkMode ? 'rgba(255, 255, 255, 0.5)' : themeColors.secondaryTextColor}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-      <FlatList
-        data={filteredDuas}
-        renderItem={renderDuaItem}
-        keyExtractor={(item) => item?.id?.toString() || Math.random().toString()}
-        ListEmptyComponent={
-          <Text style={[styles.emptyText, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}>
-            {!hydrated ? 'Loading saved Duas…' : searchQuery ? 'No saved Duas match your search.' : 'Your favorites, notes, and custom Duas will appear here.'}
-          </Text>
-        }
-      />
-    </GestureHandlerRootView>
-  );
-};
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  searchContainer: {
-    padding: 10,
-  },
-  searchInput: {
-    borderRadius: 10,
-    padding: 10,
-    fontSize: 16,
-  },
-  duaItem: {
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    marginHorizontal: 10,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.23,
-    shadowRadius: 2.62,
-    elevation: 4,
-  },
-  duaItemContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  duaTitleContainer: {
-    flex: 1,
-  },
-  duaTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  parentCategory: {
-    fontSize: 14,
-    marginTop: 5,
-  },
-  duaNote: {
-    fontSize: 14,
-    fontStyle: 'italic',
-    marginTop: 10,
-  },
-  emptyText: {
-    textAlign: 'center',
-    marginTop: 20,
-    fontSize: 16,
-  },
-});
-
-export default MyDuas;
+const normalize = value => String(value || '').toLowerCase().normalize('NFKD').replace(/[\u064b-\u065f\u0670]/g, '').trim();
+export default function MyDuas({ navigation, themeColors: t, language }) {
+  const { myDuas, favorites, notes, onToggleFavorite, hydrated, storageError } = useDua();
+  const deleteCustomDua = useDeleteCustomDua(language);
+  const [query, setQuery] = useState('');
+  const ar = language === 'ar';
+  const results = useMemo(() => myDuas.filter(dua => normalize([dua.title, dua.titleAr, dua.arabic, dua.translation, dua.transliteration, notes[dua.id]].join(' ')).includes(normalize(query))), [myDuas, notes, query]);
+  const title = item => ar ? item.titleAr || item.title : item.title;
+  return <View style={{ flex: 1, backgroundColor: t.backgroundColor }}>
+    <View style={[styles.search, { backgroundColor: t.inputBackground }]}>
+      <Ionicons name="search" size={19} color={t.secondaryTextColor} />
+      <TextInput accessibilityLabel="Search saved duas" placeholder={ar ? 'ابحث في أدعيتي' : 'Search My Duas'} placeholderTextColor={t.secondaryTextColor} value={query} onChangeText={setQuery} style={{ flex: 1, minWidth: 0, paddingHorizontal: 10, paddingVertical: 12, color: t.textColor, fontSize: 15 }} />
+      {!!query && <TouchableOpacity accessibilityLabel="Clear saved dua search" onPress={() => setQuery('')} style={{ padding: 8 }}><Ionicons name="close" size={19} color={t.textColor} /></TouchableOpacity>}
+    </View>
+    {!!storageError && <Text accessibilityRole="alert" style={{ color: t.errorColor, marginHorizontal: 16, marginBottom: 10 }}>{storageError}</Text>}
+    <FlatList style={{ flex: 1 }} data={results} keyExtractor={item => item.id} keyboardShouldPersistTaps="handled" removeClippedSubviews={false} contentContainerStyle={{ padding: 16, paddingTop: 6, paddingBottom: 28 }}
+      ListEmptyComponent={<View style={styles.empty}><Ionicons name="bookmark-outline" size={36} color={t.activeTabColor} /><Text style={{ color: t.textColor, fontSize: 18, fontWeight: '600', textAlign: 'center' }}>{!hydrated ? (ar ? 'جاري التحميل…' : 'Loading saved Duas…') : query ? (ar ? 'لا توجد نتائج' : 'No matching Duas') : (ar ? 'أدعيتك قريبة منك' : 'Keep your Duas close')}</Text><Text style={{ color: t.secondaryTextColor, textAlign: 'center', lineHeight: 23 }}>{query ? (ar ? 'جرّب كلمة أخرى.' : 'Try another word.') : (ar ? 'احفظ دعاء أثناء القراءة، أو أضف دعاءك من علامة +.' : 'Save any Dua while reading, or add your own using +.')}</Text></View>}
+      renderItem={({ item }) => <View style={[styles.card, { backgroundColor: t.inputBackground }]}>
+        <TouchableOpacity accessibilityRole="button" onPress={() => navigation.navigate('DuaDetails', { dua: item, category: null, initialFilteredSubcategories: results })} style={{ flex: 1, gap: 8, padding: 17 }}>
+          <Text style={{ color: t.textColor, fontSize: 17, fontWeight: '600', lineHeight: 25 }}>{title(item)}</Text>
+          {!!item.arabic && <Text numberOfLines={2} style={{ color: t.secondaryTextColor, fontFamily: 'Amiri', fontSize: 21, lineHeight: 34, textAlign: 'right' }}>{item.arabic}</Text>}
+          {!!(notes[item.id] || item.note) && <Text numberOfLines={2} style={{ color: t.secondaryTextColor, fontSize: 13, lineHeight: 21 }}>{notes[item.id] || item.note}</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel={item.isCustom ? (ar ? 'حذف الدعاء' : 'Delete custom Dua') : favorites[item.id] ? 'Unsave Dua' : 'Save Dua'} disabled={!hydrated} onPress={() => item.isCustom ? deleteCustomDua(item) : onToggleFavorite(item)} style={{ minWidth: 44, minHeight: 44, paddingTop: 18, alignItems: 'center' }}><Ionicons name={item.isCustom ? 'trash-outline' : favorites[item.id] ? 'bookmark' : 'bookmark-outline'} size={23} color={item.isCustom ? t.errorColor : t.activeTabColor} /></TouchableOpacity>
+      </View>} />
+  </View>;
+}
+const styles = StyleSheet.create({ search: { flexShrink: 0, minHeight: 52, flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginBottom: 10, paddingHorizontal: 12, borderRadius: 12 }, card: { borderRadius: 18, marginBottom: 12, flexDirection: 'row', overflow: 'hidden', paddingRight: 7 }, empty: { alignItems: 'center', gap: 15, paddingHorizontal: 20, paddingVertical: 35 } });

@@ -1,5 +1,7 @@
 # Quran display options
 
+Current implementation update (2026-09-19): Omar rejected the reflowed word-page appearance. The active Mushaf now uses published SVG calligraphy and mapped ayah regions for both editions. See [the selected source, reproduction and limits](QURAN_VECTOR_PAGES.md). Earlier PNG/font alternatives below are historical research.
+
 Reviewed 2026-09-07. The current page images are preserved as the default Mushaf display.
 
 | Option | Fit for this app |

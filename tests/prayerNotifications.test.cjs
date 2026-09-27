@@ -44,6 +44,23 @@ test('maps every bundled notification sound consistently', () => {
   assert.equal(notificationSound('Adhan (Makka)'), 'makkah_adhan.wav');
   assert.equal(notificationSound('Long beep'), 'long_beep.wav');
   assert.equal(notificationSound('Default notification sound'), 'default');
+  for (const [name, file] of [['Sudan', 'sudan'], ['Mishary Alafasy', 'alafasy'], ['Abdulbasit', 'abdulbasit'], ['Al-Aqsa', 'aqsa'], ['Turkey', 'turkey']]) {
+    assert.equal(notificationSound(`Adhan (${name})`), `${file}_adhan.wav`);
+  }
+});
+
+test('Vibrate has no audio, still schedules a prayer, and does not silence its advance reminder', () => {
+  const items = buildPrayerNotifications({ Dhuhr: '13:00' }, { Dhuhr: 'Vibrate' }, { Dhuhr: '5 minutes before' }, now);
+  assert.equal(items.length, 2);
+  assert.equal(items.find(i => i.reminder === 0).sound, false);
+  assert.equal(items.find(i => i.reminder === 5).sound, 'default');
+});
+test('all Remind me intervals have a future date and None removes only the advance reminder', () => {
+  for (const [label, minutes] of [['5 minutes before', 5], ['10 minutes before', 10], ['15 minutes before', 15], ['30 minutes before', 30], ['1 hour before', 60]]) {
+    const [item] = buildPrayerNotifications({ Asr: '16:00' }, { Asr: 'None' }, { Asr: label }, now);
+    assert.equal(item.reminder, minutes); assert.equal(item.date.getTime(), new Date(2026, 8, 7, 16).getTime() - minutes * 60000);
+  }
+  assert.equal(buildPrayerNotifications({ Asr: '16:00' }, { Asr: 'Vibrate' }, { Asr: 'None' }, now).length, 1);
 });
 
 test('uses the selected city’s time zone for native notification dates', () => {

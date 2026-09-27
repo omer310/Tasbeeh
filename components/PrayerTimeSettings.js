@@ -1,741 +1,127 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Switch, TouchableOpacity, Modal, FlatList, TextInput, ActivityIndicator, ScrollView, Platform } from 'react-native';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Switch, TouchableOpacity, FlatList, TextInput, ActivityIndicator, ScrollView, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { detectPrayerLocation, describePrayerLocation } from '../services/PrayerLocationService';
+import { withTimeout } from '../utils/withTimeout';
+import { ADJUSTABLE_PRAYERS, regionalMethod, validatePrayerSettings } from '../utils/prayerSettings';
+import { PRAYER_METHODS } from '../data/prayerMethods';
 import { countries } from './countries';
-import AdhanPreferencesModal from './AdhanPreferencesModal';
 
-const madhhabSettings = [
-  { id: 1, name: 'Shafi, Maliki, Hanbali' },
-  { id: 2, name: 'Hanafi' }
-];
-
-const adjustmentMethods = [
-  { id: 1, name: 'No adjustment' },
-  { id: 2, name: 'Middle of night' },
-  { id: 3, name: 'One-seventh of night' },
-  { id: 4, name: 'Angle-based' }
-];
-
-const calculationMethods = [
-  { id: 1, name: 'University of Islamic Sciences, Karachi', countries: ['PK', 'AF', 'BD', 'IN'] },
-  { id: 2, name: 'Islamic Society of North America', countries: ['US', 'CA'] },
-  { id: 3, name: 'Muslim World League', countries: ['EU', 'AF', 'AL', 'AZ', 'BY', 'BE', 'BA', 'BG', 'HR', 'CZ', 'DK', 'EE', 'FI', 'GE', 'DE', 'GR', 'HU', 'IS', 'IE', 'IT', 'KZ', 'XK', 'KG', 'LV', 'LI', 'LT', 'LU', 'MT', 'MD', 'MC', 'ME', 'NL', 'MK', 'NO', 'PL', 'PT', 'RO', 'SM', 'RS', 'SK', 'SI', 'ES', 'SE', 'CH', 'TJ', 'UA', 'GB', 'UZ', 'VA'] },
-  { id: 4, name: 'Umm Al-Qura University, Makkah', countries: ['SA'] },
-  { id: 5, name: 'Egyptian General Authority of Survey', countries: ['EG', 'SD', 'LY', 'DZ', 'MA', 'TN', 'MR', 'SO', 'TD', 'DJ', 'ER', 'ET'] },
-  { id: 7, name: 'Institute of Geophysics, University of Tehran', countries: ['IR'] },
-  { id: 8, name: 'Gulf Region', countries: ['AE', 'KW', 'QA', 'BH', 'OM', 'YE'] },
-  { id: 9, name: 'Kuwait', countries: ['KW'] },
-  { id: 10, name: 'Qatar', countries: ['QA'] },
-  { id: 11, name: 'Majlis Ugama Islam Singapura, Singapore', countries: ['SG', 'MY', 'ID', 'BN', 'TH', 'PH', 'VN', 'KH', 'LA', 'MM'] },
-  { id: 12, name: 'Union Organization islamic de France', countries: ['FR'] },
-  { id: 13, name: 'Diyanet İşleri Başkanlığı, Turkey', countries: ['TR', 'CY', 'AM', 'GR', 'BG'] },
-  { id: 14, name: 'Spiritual Administration of Muslims of Russia', countries: ['RU', 'BY', 'UA', 'MD', 'EE', 'LV', 'LT', 'PL', 'CZ', 'SK', 'HU', 'RO', 'BG', 'RS', 'HR', 'SI', 'BA', 'ME', 'MK', 'AL'] },
-  { id: 15, name: 'Moonsighting Committee Worldwide', countries: ['US', 'CA', 'GB', 'AU', 'NZ', 'ZA', 'NG', 'GH', 'KE', 'TZ', 'UG', 'RW', 'SN', 'ML', 'NE', 'CM', 'CI', 'BF', 'TG', 'BJ', 'GN', 'LR', 'SL', 'GM'] },
-];
-
-const PrayerTimeSettings = ({ isVisible, onClose, themeColors, onSettingsChange }) => {
-  const [showImsak, setShowImsak] = useState(false);
-  const [autoDetectLocation, setAutoDetectLocation] = useState(Platform.OS !== 'web');
-  const [automaticSettings, setAutomaticSettings] = useState(true);
-  const [location, setLocation] = useState('');
-  const [showLocationPicker, setShowLocationPicker] = useState(false);
-  const [calculationMethod, setCalculationMethod] = useState('');
-  const [calculationMethodId, setCalculationMethodId] = useState(3); // Default to Muslim World League
-  const [latitude, setLatitude] = useState(null);
-  const [longitude, setLongitude] = useState(null);
-  const [city, setCity] = useState('');
-  const [country, setCountry] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedPrayer, setSelectedPrayer] = useState(null);
-  const [isAdhanModalVisible, setIsAdhanModalVisible] = useState(false);
-  const [prayerTimes, setPrayerTimes] = useState(null);
-  const [madhhabMethod, setMadhhabMethod] = useState(1);
-  const [adjustmentMethod, setAdjustmentMethod] = useState(1);
-  const [fajrAngle, setFajrAngle] = useState('18');
-  const [ishaAngle, setIshaAngle] = useState('17');
-  const [showManualSettings, setShowManualSettings] = useState(false);
-  const [showCalculationMethodPicker, setShowCalculationMethodPicker] = useState(false);
-
+const prayerArabic = { Fajr: 'الفجر', Sunrise: 'الشروق', Dhuhr: 'الظهر', Asr: 'العصر', Maghrib: 'المغرب', Isha: 'العشاء' };
+export default function PrayerTimeSettings({ isVisible, onClose, themeColors: t, initialSettings, onSettingsChange, language = 'en' }) {
+  const ar = language === 'ar', tr = (en, arabic) => ar ? arabic : en;
+  const [draft, setDraft] = useState({}), [picker, setPicker] = useState(null), [query, setQuery] = useState('');
+  const [busy, setBusy] = useState(null), [error, setError] = useState('');
+  const operation = useRef(0), saving = useRef(false), initial = useRef(initialSettings), form = useRef(null);
+  useLayoutEffect(() => { initial.current = initialSettings; }, [initialSettings]);
   useEffect(() => {
-    loadSettings();
-    if (Platform.OS !== 'web') handleInitialLocation();
-  }, []);
-
-  const handleInitialLocation = async () => {
-    const savedLocation = await AsyncStorage.getItem('location');
-    if (!savedLocation) {
-      handleAutoDetectChange(true);
+    ++operation.current;
+    if (isVisible) {
+      const values = { showImsak: false, timeFormat: '12', calculationMethodId: 2, madhhabMethod: 1, ...initial.current };
+      const countryCode = values.countryCode || countries.find(country => country.name === values.country || country.code === values.country)?.code;
+      setDraft({ ...values, countryCode, autoDetectLocation: values.autoDetectLocation ?? !(values.city && values.country), adjustmentMethod: [2, 3, 4].includes(Number(values.adjustmentMethod)) ? Number(values.adjustmentMethod) : 4 });
+      setError(''); setBusy(saving.current ? 'saving' : null); setPicker(null); setQuery('');
     }
-  };
-
-  const loadSettings = async () => {
+    return () => { ++operation.current; };
+  }, [isVisible]);
+  const displayNames = useMemo(() => { try { return new Intl.DisplayNames([language], { type: 'region' }); } catch { return null; } }, [language]);
+  const countryLabel = item => displayNames?.of(item.code) || item.name;
+  const update = patch => { if (!saving.current) { ++operation.current; setBusy(null); setError(''); setDraft(value => ({ ...value, ...patch })); } };
+  const close = () => { ++operation.current; onClose(); };
+  const back = () => { if (picker) { setPicker(null); setQuery(''); } else close(); };
+  const locate = async () => {
+    if (saving.current) return;
+    const id = ++operation.current;
+    setBusy('locating'); setError('');
     try {
-      const savedShowImsak = await AsyncStorage.getItem('showImsak');
-      const savedAutoDetect = await AsyncStorage.getItem('autoDetectLocation');
-      const savedAutoSettings = await AsyncStorage.getItem('automaticSettings');
-      const savedLocation = await AsyncStorage.getItem('location');
-      const savedMethod = await AsyncStorage.getItem('calculationMethod');
-      const savedMethodId = await AsyncStorage.getItem('calculationMethodId');
-      const savedLatitude = await AsyncStorage.getItem('latitude');
-      const savedLongitude = await AsyncStorage.getItem('longitude');
-      const savedCity = await AsyncStorage.getItem('city');
-      const savedCountry = await AsyncStorage.getItem('country');
-
-      setShowImsak(savedShowImsak === 'true');
-      setAutoDetectLocation(savedAutoDetect == null ? Platform.OS !== 'web' : savedAutoDetect !== 'false');
-      setAutomaticSettings(savedAutoSettings !== 'false');
-      if (savedLocation) setLocation(savedLocation);
-      if (savedMethod) setCalculationMethod(savedMethod);
-      if (savedMethodId) setCalculationMethodId(parseInt(savedMethodId));
-      if (savedLatitude) setLatitude(parseFloat(savedLatitude));
-      if (savedLongitude) setLongitude(parseFloat(savedLongitude));
-      if (savedCity) setCity(savedCity);
-      if (savedCountry) setCountry(savedCountry);
-    } catch (error) {
-      console.error('Error loading settings:', error);
-    }
+      const coords = await detectPrayerLocation();
+      const [places, location] = await Promise.all([
+        withTimeout(Location.reverseGeocodeAsync(coords), 3000, 'Address unavailable').catch(() => []), describePrayerLocation(coords),
+      ]);
+      if (id !== operation.current) return;
+      const countryCode = places[0]?.isoCountryCode;
+      setDraft(value => ({ ...value, latitude: coords.latitude, longitude: coords.longitude, autoDetectLocation: true, city: '', country: '', countryCode, location,
+        ...(value.automaticSettings && countryCode ? { calculationMethodId: regionalMethod(countryCode) } : {}) }));
+    } catch (e) { if (id === operation.current) setError(e.message); }
+    finally { if (id === operation.current) setBusy(null); }
   };
-
-  const saveSettings = async () => {
+  const save = async () => {
+    if (saving.current || busy === 'locating') return;
+    const id = ++operation.current;
+    saving.current = true; setBusy('saving'); setError('');
     try {
-      await AsyncStorage.setItem('showImsak', showImsak.toString());
-      await AsyncStorage.setItem('autoDetectLocation', autoDetectLocation.toString());
-      await AsyncStorage.setItem('automaticSettings', automaticSettings.toString());
-      await AsyncStorage.setItem('location', location);
-      await AsyncStorage.setItem('calculationMethod', calculationMethod);
-      await AsyncStorage.setItem('calculationMethodId', calculationMethodId.toString());
-      await AsyncStorage.setItem('latitude', latitude != null ? latitude.toString() : '');
-      await AsyncStorage.setItem('longitude', longitude != null ? longitude.toString() : '');
-      await AsyncStorage.setItem('city', city);
-      await AsyncStorage.setItem('country', country);
-      await AsyncStorage.setItem('madhhabMethod', madhhabMethod.toString());
-      await AsyncStorage.setItem('adjustmentMethod', adjustmentMethod.toString());
-      await AsyncStorage.setItem('fajrAngle', fajrAngle);
-      await AsyncStorage.setItem('ishaAngle', ishaAngle);
-
-      onSettingsChange({
-        showImsak,
-        autoDetectLocation,
-        automaticSettings,
-        location,
-        calculationMethod,
-        calculationMethodId,
-        latitude,
-        longitude,
-        city,
-        country,
-        madhhabMethod,
-        adjustmentMethod,
-        fajrAngle,
-        ishaAngle
-      });
-    } catch (error) {
-      console.error('Error saving settings:', error);
-    }
-  };
-
-  const getCalculationMethod = (countryCode) => {
-    const method = calculationMethods.find(m => m.countries.includes(countryCode));
-    return method ? method : calculationMethods.find(m => m.id === 3); // Default to Muslim World League
-  };
-
-  const handleManualLocationSelect = (selectedCountry) => {
-    const countryCode = countries.find(c => c.name === selectedCountry)?.code;
-    setAutoDetectLocation(false);
-    setLatitude(null); setLongitude(null);
-    setCountry(selectedCountry);
-    setLocation(selectedCountry);
-    setShowLocationPicker(false);
-    
-    const method = getCalculationMethod(countryCode);
-    setCalculationMethodId(method.id);
-    setCalculationMethod(method.name);
-    
-    if (!automaticSettings) {
-      console.log('Calculation method updated due to location change');
-    }
-  };
-
-  const handleAutoDetectChange = async (value) => {
-    setAutoDetectLocation(value);
-    if (value) {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.error('Permission to access location was denied');
-        return;
+      let normalized;
+      try { normalized = validatePrayerSettings(draft); }
+      catch (e) {
+        const messages = { location: tr('Choose a country and enter its city, or use your current location.', 'اختر الدولة وأدخل المدينة أو استخدم موقعك الحالي.'), angles: tr('Fajr and Isha angles must be greater than 0 and at most 30.', 'يجب أن تكون زوايا الفجر والعشاء أكبر من صفر ولا تتجاوز ٣٠.'), adjustments: tr('Adjustments must be whole minutes between −30 and +30.', 'التعديلات دقائق صحيحة بين −٣٠ و+٣٠.'), method: tr('Choose a valid calculation method.', 'اختر طريقة حساب صحيحة.') };
+        throw new Error(messages[e.code] || e.message);
       }
-
-      setIsLoading(true);
-      try {
-        let locationResult = await Location.getCurrentPositionAsync({});
-        const { latitude, longitude } = locationResult.coords;
-        setLatitude(latitude);
-        setLongitude(longitude);
-
-        let geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
-        if (geocode[0]) {
-          const newCity = geocode[0].city || geocode[0].subregion || '';
-          const newCountry = geocode[0].country || '';
-          const countryCode = countries.find(c => c.name === newCountry)?.code;
-          setCity(newCity);
-          setCountry(newCountry);
-          const newLocation = newCity ? `${newCity}, ${newCountry}` : newCountry;
-          setLocation(newLocation);
-          
-          await AsyncStorage.setItem('location', newLocation);
-          
-          const method = getCalculationMethod(countryCode);
-          setCalculationMethodId(method.id);
-          setCalculationMethod(method.name);
-
-          onSettingsChange({
-            showImsak,
-            autoDetectLocation: true,
-            automaticSettings: true,
-            location: newLocation,
-            calculationMethod: method.name,
-            calculationMethodId: method.id,
-            latitude,
-            longitude,
-            city: newCity,
-            country: newCountry
-          });
-        }
-      } catch (error) {
-        console.error('Error in auto-detect location:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    }
+      await onSettingsChange(normalized);
+      setDraft(normalized);
+      if (id === operation.current) close();
+    } catch (e) { if (id === operation.current) { setError(e.message || tr('Could not update prayer times. Please retry.', 'تعذر تحديث أوقات الصلاة. حاول مجددًا.')); form.current?.scrollTo({ y: 0, animated: true }); } }
+    finally { saving.current = false; setBusy(null); }
   };
-
-  const fetchPrayerTimes = async () => {
-    setIsLoading(true);
-    try {
-      const response = await axios.get('https://api.aladhan.com/v1/timingsByCity', {
-        params: {
-          city: city,
-          country: country,
-          method: calculationMethodId,
-          date: new Date().toISOString().split('T')[0],
-          adjustment: 1,
-        },
-      });
-      setPrayerTimes(response.data.data.timings);
-    } catch (error) {
-      console.error('Error fetching prayer times:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const filteredCountries = countries.filter(country => 
-    country.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const handlePrayerPress = (prayer) => {
-    setSelectedPrayer(prayer);
-    setIsAdhanModalVisible(true);
-  };
-
-  const closeAdhanModal = () => {
-    setIsAdhanModalVisible(false);
-    setSelectedPrayer(null);
-  };
-
-  const renderPrayerTime = (prayer, time) => (
-    <TouchableOpacity
-      style={styles.prayerTimeContainer}
-      onPress={() => handlePrayerPress(prayer)}
-    >
-      <View style={styles.prayerInfoContainer}>
-        <Ionicons name="time-outline" size={24} color={themeColors.textColor} />
-        <Text style={[styles.prayerName, { color: themeColors.textColor }]}>{prayer}</Text>
-      </View>
-      <View style={styles.timeContainer}>
-        <Text style={[styles.prayerTime, { color: themeColors.textColor }]}>{time}</Text>
-        <Ionicons name="chevron-forward" size={24} color={themeColors.secondaryTextColor} />
-      </View>
-    </TouchableOpacity>
-  );
-
-  const handleAutomaticSettingsChange = (value) => {
-    setAutomaticSettings(value);
-    setShowManualSettings(!value);
-    
-    if (value && autoDetectLocation) {
-      handleAutoDetectChange(true);
-    }
-  };
-
-  const handleCalculationMethodSelect = (method) => {
-    setCalculationMethod(method.name);
-    setCalculationMethodId(method.id);
-    setShowCalculationMethodPicker(false);
-    
-    if (!automaticSettings) {
-      onSettingsChange({
-        showImsak, autoDetectLocation, automaticSettings, location, latitude, longitude,
-        calculationMethod: method.name,
-        calculationMethodId: method.id,
-      });
-    }
-  };
-
-  return (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={isVisible}
-      onRequestClose={() => {
-        saveSettings();
-        onClose();
-      }}
-    >
-      <View style={[styles.modalContainer, { backgroundColor: themeColors.backgroundColor }]}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => {
-            saveSettings();
-            onClose();
-          }}>
-            <Ionicons name="arrow-back" size={24} color={themeColors.textColor} />
-          </TouchableOpacity>
-          <Text style={[styles.title, { color: themeColors.textColor }]}>Prayer Times Settings</Text>
+  const selectedMethod = PRAYER_METHODS.find(method => method.id === Number(draft.calculationMethodId));
+  const accentText = t.isDark ? t.backgroundColor : '#fff';
+  const input = [styles.input, { color: t.textColor, backgroundColor: t.inputBackground }];
+  const section = label => <Text style={[styles.section, { color: t.textColor }]}>{label}</Text>;
+  const choice = (label, action, selected = false) => <TouchableOpacity key={label} accessibilityRole="button" accessibilityState={{ selected, disabled: busy === 'saving' }} disabled={busy === 'saving'} onPress={action} style={[styles.choice, { backgroundColor: selected ? t.activeTabColor : t.inputBackground }]}><Text style={{ color: selected ? accentText : t.textColor, flexShrink: 1 }}>{label}</Text></TouchableOpacity>;
+  const openPicker = next => { if (saving.current) return; ++operation.current; setBusy(null); setQuery(''); setPicker(next); };
+  const title = picker === 'country' ? tr('Choose country', 'اختر الدولة') : picker === 'method' ? tr('Calculation method', 'طريقة الحساب') : tr('Prayer settings', 'إعدادات الصلاة');
+  return <Modal visible={isVisible} animationType="slide" presentationStyle="fullScreen" onRequestClose={back}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: t.backgroundColor }]} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.page}>
+          <View style={[styles.header, { borderBottomColor: t.separatorColor }]}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={tr('Back', 'رجوع')} onPress={back} style={styles.backButton}><Ionicons name={ar ? 'arrow-forward' : 'arrow-back'} size={25} color={t.textColor} /></TouchableOpacity>
+            <Text accessibilityRole="header" style={{ flex: 1, color: t.textColor, fontSize: 24, fontWeight: '700', textAlign: ar ? 'right' : 'left' }}>{title}</Text>
+          </View>
+          <View style={styles.body}>
+    {picker ? <>
+      <TextInput accessibilityLabel={tr('Search', 'بحث')} placeholder={tr('Search', 'بحث')} placeholderTextColor={t.secondaryTextColor} value={query} onChangeText={setQuery} style={input} />
+      <FlatList keyboardShouldPersistTaps="handled" data={(picker === 'country' ? countries : PRAYER_METHODS).filter(item => `${item.name} ${item.ar || ''} ${item.code || ''} ${item.code ? countryLabel(item) : ''}`.toLowerCase().includes(query.toLowerCase()))} keyExtractor={item => String(item.id ?? item.code)} renderItem={({ item }) => <TouchableOpacity accessibilityRole="button" style={[styles.listRow, { borderBottomColor: t.separatorColor }]} onPress={() => {
+        if (picker === 'country') update({ country: item.name, countryCode: item.code, city: item.name === draft.country ? draft.city : '', latitude: null, longitude: null, autoDetectLocation: false, ...(draft.automaticSettings ? { calculationMethodId: regionalMethod(item.code) } : {}) });
+        else update({ calculationMethodId: item.id, automaticSettings: false, fajrAngle: draft.fajrAngle || '18', ishaAngle: draft.ishaAngle || '17' });
+        setPicker(null); setQuery('');
+      }}><Text style={{ color: t.textColor, lineHeight: 23 }}>{picker === 'country' ? countryLabel(item) : ar ? item.ar : item.name}</Text></TouchableOpacity>} />
+    </> : <>
+      <ScrollView ref={form} style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.form}>
+        {!!error && <Text accessibilityRole="alert" style={{ color: t.errorColor, lineHeight: 22 }}>{error}</Text>}
+        {section(tr('Location', 'الموقع'))}
+        <View style={styles.options}>{choice(tr('Current location', 'الموقع الحالي'), locate, draft.autoDetectLocation !== false)}{choice(tr('Choose a city', 'اختيار مدينة'), () => update({ autoDetectLocation: false, latitude: null, longitude: null }), draft.autoDetectLocation === false)}</View>
+        {draft.autoDetectLocation !== false ? <Text style={{ color: t.secondaryTextColor }}>{busy === 'locating' ? tr('Finding your location…', 'جارٍ تحديد الموقع…') : draft.location || tr('Tap Current location to locate your phone.', 'اضغط الموقع الحالي لتحديد موقع الهاتف.')}</Text> : <>
+          {choice(draft.country ? countryLabel(countries.find(c => c.name === draft.country || c.code === draft.country) || { code: draft.countryCode || 'ZZ', name: draft.country }) : tr('Choose country', 'اختر الدولة'), () => openPicker('country'))}
+          <TextInput editable={busy !== 'saving'} accessibilityLabel={tr('Prayer city', 'مدينة الصلاة')} placeholder={tr('City, e.g. New York', 'المدينة، مثل الخرطوم')} placeholderTextColor={t.secondaryTextColor} value={draft.city || ''} onChangeText={city => update({ city, latitude: null, longitude: null, autoDetectLocation: false })} style={input} />
+        </>}
+        {section(tr('Calculation', 'الحساب'))}
+        {choice(selectedMethod ? ar ? selectedMethod.ar : selectedMethod.name : tr('Choose method', 'اختر الطريقة'), () => openPicker('method'))}
+        <View style={styles.toggle}><Text style={{ color: t.textColor, flex: 1 }}>{tr('Suggest method for selected country', 'اقتراح الطريقة للدولة المختارة')}</Text><Switch accessibilityLabel={tr('Suggest method for selected country', 'اقتراح الطريقة للدولة المختارة')} disabled={busy === 'saving'} value={!!draft.automaticSettings} onValueChange={automaticSettings => update({ automaticSettings, ...(automaticSettings && draft.countryCode ? { calculationMethodId: regionalMethod(draft.countryCode) } : {}) })} /></View>
+        <Text style={{ color: t.textColor }}>{tr('Asr calculation', 'حساب العصر')}</Text>
+        <View style={styles.options}>{choice(tr('Shafi, Maliki, Hanbali', 'الشافعي والمالكي والحنبلي'), () => update({ madhhabMethod: 1 }), Number(draft.madhhabMethod) !== 2)}{choice(tr('Hanafi', 'الحنفي'), () => update({ madhhabMethod: 2 }), Number(draft.madhhabMethod) === 2)}</View>
+        <Text style={{ color: t.textColor }}>{tr('High latitude rule', 'حساب المناطق عالية العرض')}</Text>
+        <View style={styles.options}>{[[2, 'Middle of night', 'منتصف الليل'], [3, 'One-seventh', 'سُبع الليل'], [4, 'Angle based', 'حسب الزاوية']].map(([id, en, arabic]) => choice(tr(en, arabic), () => update({ adjustmentMethod: id }), Number(draft.adjustmentMethod) === id))}</View>
+        {Number(draft.calculationMethodId) === 99 && <View style={styles.options}>{['fajrAngle', 'ishaAngle'].map(key => <View key={key} style={{ flex: 1, gap: 8 }}><Text style={{ color: t.textColor }}>{key === 'fajrAngle' ? tr('Fajr angle', 'زاوية الفجر') : tr('Isha angle', 'زاوية العشاء')}</Text><TextInput editable={busy !== 'saving'} accessibilityLabel={key} keyboardType="decimal-pad" value={String(draft[key] || '')} onChangeText={value => update({ [key]: value })} style={input} /></View>)}</View>}
+        {section(tr('Minute adjustments', 'تعديل الدقائق'))}
+        <Text style={{ color: t.secondaryTextColor, fontSize: 12 }}>{tr('Adjust to match your local mosque (−30 to +30 minutes).', 'عدّل الأوقات لتوافق مسجدك المحلي (من −٣٠ إلى +٣٠ دقيقة).')}</Text>
+        {ADJUSTABLE_PRAYERS.map(prayer => {
+          const minutes = Number(draft.prayerAdjustments?.[prayer] || 0), label = ar ? prayerArabic[prayer] : prayer;
+          return <View key={prayer} style={styles.adjustment}><Text style={{ color: t.textColor, flex: 1 }}>{label}</Text>{[-1, 0, 1].map(direction => direction === 0 ? <Text key="value" style={{ color: t.textColor, minWidth: 38, textAlign: 'center' }}>{minutes > 0 ? '+' : ''}{minutes.toLocaleString(ar ? 'ar' : 'en')}</Text> : <TouchableOpacity key={direction} accessibilityRole="button" accessibilityLabel={`${direction < 0 ? tr('Decrease', 'تقليل') : tr('Increase', 'زيادة')} ${label}`} disabled={busy === 'saving' || Math.abs(minutes + direction) > 30} onPress={() => update({ prayerAdjustments: { ...draft.prayerAdjustments, [prayer]: minutes + direction } })} style={styles.step}><Ionicons name={direction < 0 ? 'remove' : 'add'} color={t.activeTabColor} size={22} /></TouchableOpacity>)}</View>;
+        })}
+        {choice(tr('Reset minute adjustments', 'إعادة ضبط الدقائق'), () => update({ prayerAdjustments: {} }))}
+        {section(tr('Display', 'العرض'))}
+        <View style={styles.options}>{choice(tr('12-hour', '١٢ ساعة'), () => update({ timeFormat: '12' }), draft.timeFormat !== '24')}{choice(tr('24-hour', '٢٤ ساعة'), () => update({ timeFormat: '24' }), draft.timeFormat === '24')}</View>
+        <View style={styles.toggle}><Text style={{ color: t.textColor, flex: 1 }}>{tr('Show Imsak with Fajr', 'إظهار الإمساك مع الفجر')}</Text><Switch accessibilityLabel={tr('Show Imsak with Fajr', 'إظهار الإمساك مع الفجر')} disabled={busy === 'saving'} value={!!draft.showImsak} onValueChange={showImsak => update({ showImsak })} /></View>
+        <Text style={{ color: t.secondaryTextColor, fontSize: 12, lineHeight: 20 }}>{tr('Confirm the calculation method with your local mosque. Tap a prayer on the home page for its sound and reminder.', 'تحقق من طريقة الحساب مع مسجدك المحلي. اضغط على الصلاة في الصفحة الرئيسية لضبط صوتها والتذكير.')}</Text>
+      </ScrollView>
+      <TouchableOpacity accessibilityRole="button" disabled={!!busy} onPress={save} style={[styles.save, { backgroundColor: t.activeTabColor, opacity: busy ? 0.7 : 1 }]}>{!!busy && <ActivityIndicator color={accentText} />}<Text style={{ color: accentText, fontWeight: '700' }}>{busy === 'saving' ? tr('Updating prayer times…', 'جارٍ تحديث أوقات الصلاة…') : tr('Save settings', 'حفظ الإعدادات')}</Text></TouchableOpacity>
+    </>}
+          </View>
         </View>
-
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          <View style={styles.settingItem}>
-            <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>Show Imsak in Prayer Times page</Text>
-            <Switch
-              value={showImsak}
-              onValueChange={setShowImsak}
-              trackColor={{ false: "#767577", true: themeColors.activeTabColor }}
-              thumbColor={showImsak ? "#f4f3f4" : "#f4f3f4"}
-            />
-          </View>
-
-          <Text style={[styles.sectionTitle, { color: themeColors.activeTabColor }]}>Prayer Time Calculation</Text>
-
-          <TouchableOpacity style={styles.settingItem} onPress={() => setShowLocationPicker(true)}>
-            <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>Location</Text>
-            <Text style={[styles.settingValue, { color: themeColors.secondaryTextColor }]}>{location}</Text>
-          </TouchableOpacity>
-
-          {!autoDetectLocation && (
-            <View style={styles.settingItem}>
-              <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>City</Text>
-              <TextInput accessibilityLabel="City" placeholder="Enter your city" value={city}
-                onChangeText={setCity} style={[styles.settingValue, { color: themeColors.textColor, minWidth: 150 }]}
-                placeholderTextColor={themeColors.secondaryTextColor} />
-            </View>
-          )}
-
-          <View style={styles.settingItem}>
-            <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>Auto-detect Location</Text>
-            <Switch
-              value={autoDetectLocation}
-              onValueChange={handleAutoDetectChange}
-              trackColor={{ false: "#767577", true: themeColors.activeTabColor }}
-              thumbColor={autoDetectLocation ? "#f4f3f4" : "#f4f3f4"}
-            />
-          </View>
-
-          <View style={styles.settingItem}>
-            <View>
-              <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>Automatic settings</Text>
-              <Text style={[styles.settingValue, { color: themeColors.secondaryTextColor }]}>
-                {calculationMethod}
-              </Text>
-            </View>
-            <Switch
-              value={automaticSettings}
-              onValueChange={handleAutomaticSettingsChange}
-              trackColor={{ false: "#767577", true: themeColors.activeTabColor }}
-              thumbColor={automaticSettings ? "#f4f3f4" : "#f4f3f4"}
-            />
-          </View>
-
-          {!automaticSettings && (
-            <View style={styles.manualSettingsContainer}>
-              <Text style={[styles.sectionTitle, { color: themeColors.activeTabColor }]}>
-                Manual Settings
-              </Text>
-
-              <TouchableOpacity 
-                style={styles.settingItem}
-                onPress={() => setShowCalculationMethodPicker(true)}
-              >
-                <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>
-                  Calculation Method
-                </Text>
-                <Text style={[styles.settingValue, { color: themeColors.secondaryTextColor }]}>
-                  {calculationMethod}
-                </Text>
-              </TouchableOpacity>
-
-              <View style={styles.settingItem}>
-                <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>
-                  Madhab
-                </Text>
-                <View style={styles.pickerContainer}>
-                  {madhhabSettings.map((madhab) => (
-                    <TouchableOpacity
-                      key={madhab.id}
-                      style={[
-                        styles.pickerOption,
-                        madhhabMethod === madhab.id && styles.pickerOptionSelected,
-                        { borderColor: themeColors.activeTabColor }
-                      ]}
-                      onPress={() => setMadhhabMethod(madhab.id)}
-                    >
-                      <Text style={[
-                        styles.pickerOptionText,
-                        madhhabMethod === madhab.id && { color: themeColors.activeTabColor }
-                      ]}>
-                        {madhab.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.settingItem}>
-                <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>
-                  High Latitude Rule
-                </Text>
-                <View style={styles.pickerContainer}>
-                  {adjustmentMethods.map((method) => (
-                    <TouchableOpacity
-                      key={method.id}
-                      style={[
-                        styles.pickerOption,
-                        adjustmentMethod === method.id && styles.pickerOptionSelected,
-                        { borderColor: themeColors.activeTabColor }
-                      ]}
-                      onPress={() => setAdjustmentMethod(method.id)}
-                    >
-                      <Text style={[
-                        styles.pickerOptionText,
-                        adjustmentMethod === method.id && { color: themeColors.activeTabColor }
-                      ]}>
-                        {method.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.settingItem}>
-                <Text style={[styles.settingLabel, { color: themeColors.textColor }]}>
-                  Prayer Angles
-                </Text>
-                <View style={styles.anglesContainer}>
-                  <View style={styles.angleInput}>
-                    <Text style={[styles.angleLabel, { color: themeColors.secondaryTextColor }]}>
-                      Fajr
-                    </Text>
-                    <TextInput
-                      style={[styles.angleTextInput, { color: themeColors.textColor }]}
-                      value={fajrAngle}
-                      onChangeText={setFajrAngle}
-                      keyboardType="numeric"
-                      placeholder="18°"
-                      placeholderTextColor={themeColors.secondaryTextColor}
-                    />
-                  </View>
-                  <View style={styles.angleInput}>
-                    <Text style={[styles.angleLabel, { color: themeColors.secondaryTextColor }]}>
-                      Isha
-                    </Text>
-                    <TextInput
-                      style={[styles.angleTextInput, { color: themeColors.textColor }]}
-                      value={ishaAngle}
-                      onChangeText={setIshaAngle}
-                      keyboardType="numeric"
-                      placeholder="17°"
-                      placeholderTextColor={themeColors.secondaryTextColor}
-                    />
-                  </View>
-                </View>
-              </View>
-            </View>
-          )}
-        </ScrollView>
-
-        <Text style={[styles.infoText, { color: themeColors.secondaryTextColor }]}>
-          These prayer times have been verified with {location} • {calculationMethod}. More info
-        </Text>
-
-        {prayerTimes && (
-          <View style={styles.container}>
-            {renderPrayerTime('Fajr', prayerTimes.Fajr)}
-            {renderPrayerTime('Dhuhr', prayerTimes.Dhuhr)}
-            {renderPrayerTime('Asr', prayerTimes.Asr)}
-            {renderPrayerTime('Maghrib', prayerTimes.Maghrib)}
-            {renderPrayerTime('Isha', prayerTimes.Isha)}
-          </View>
-        )}
-
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={showLocationPicker}
-          onRequestClose={() => setShowLocationPicker(false)}
-        >
-          <View style={[styles.pickerModal, { backgroundColor: themeColors.backgroundColor }]}>
-            <View style={styles.pickerHeader}>
-              <TouchableOpacity onPress={() => setShowLocationPicker(false)}>
-                <Ionicons name="close" size={24} color={themeColors.textColor} />
-              </TouchableOpacity>
-              <Text style={[styles.pickerTitle, { color: themeColors.textColor }]}>Select Country</Text>
-            </View>
-            <TextInput
-              style={[styles.searchInput, { color: themeColors.textColor, backgroundColor: themeColors.cardBackground }]}
-              placeholder="Search countries..."
-              placeholderTextColor={themeColors.secondaryTextColor}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            <FlatList
-              data={filteredCountries}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.countryItem, { borderBottomColor: themeColors.borderColor }]}
-                  onPress={() => handleManualLocationSelect(item.name)}
-                >
-                  <Text style={[styles.countryText, { color: themeColors.textColor }]}>{item.name}</Text>
-                  <Text style={[styles.countryCode, { color: themeColors.secondaryTextColor }]}>{item.code}</Text>
-                </TouchableOpacity>
-              )}
-              keyExtractor={(item) => item.code}
-            />
-          </View>
-        </Modal>
-
-        <AdhanPreferencesModal
-          isVisible={isAdhanModalVisible}
-          onClose={closeAdhanModal}
-          prayer={selectedPrayer}
-          themeColors={themeColors}
-        />
-
-        {isLoading && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color={themeColors.activeTabColor} />
-          </View>
-        )}
-
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={showCalculationMethodPicker}
-          onRequestClose={() => setShowCalculationMethodPicker(false)}
-        >
-          <View style={[styles.pickerModal, { backgroundColor: themeColors.backgroundColor }]}>
-            <View style={styles.pickerHeader}>
-              <TouchableOpacity onPress={() => setShowCalculationMethodPicker(false)}>
-                <Ionicons name="close" size={24} color={themeColors.textColor} />
-              </TouchableOpacity>
-              <Text style={[styles.pickerTitle, { color: themeColors.textColor }]}>Select Calculation Method</Text>
-            </View>
-            <FlatList
-              data={calculationMethods}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.methodItem, { borderBottomColor: themeColors.borderColor }]}
-                  onPress={() => handleCalculationMethodSelect(item)}
-                >
-                  <Text style={[styles.methodName, { color: themeColors.textColor }]}>{item.name}</Text>
-                  {item.countries.length > 0 && (
-                    <Text style={[styles.methodCountries, { color: themeColors.secondaryTextColor }]}>
-                      Used in: {item.countries.join(', ')}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              )}
-              keyExtractor={(item) => item.id.toString()}
-            />
-          </View>
-        </Modal>
-      </View>
-    </Modal>
-  );
-};
-
-const styles = StyleSheet.create({
-  modalContainer: {
-    flex: 1,
-    padding: 20,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginLeft: 20,
-  },
-  settingItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  settingLabel: {
-    fontSize: 16,
-  },
-  settingValue: {
-    fontSize: 14,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  infoText: {
-    fontSize: 14,
-    marginTop: 20,
-  },
-  pickerModal: {
-    flex: 1,
-    padding: 20,
-  },
-  pickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  pickerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    flex: 1,
-    textAlign: 'center',
-  },
-  searchInput: {
-    padding: 10,
-    marginBottom: 20,
-    borderRadius: 10,
-    fontSize: 16,
-  },
-  countryItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 10,
-    borderBottomWidth: 1,
-  },
-  countryText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  countryCode: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  loadingOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  container: {
-    padding: 20,
-  },
-  prayerTimeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  prayerInfoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  prayerName: {
-    fontSize: 18,
-    marginLeft: 10,
-  },
-  timeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  prayerTime: {
-    fontSize: 18,
-    marginRight: 10,
-  },
-  manualSettingsContainer: {
-    marginTop: 20,
-  },
-  pickerContainer: {
-    flexDirection: 'column',
-    marginTop: 10,
-  },
-  pickerOption: {
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginVertical: 5,
-  },
-  pickerOptionSelected: {
-    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-  },
-  pickerOptionText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  anglesContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  angleInput: {
-    flex: 1,
-    marginHorizontal: 5,
-  },
-  angleLabel: {
-    fontSize: 14,
-    marginBottom: 5,
-  },
-  angleTextInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 8,
-    fontSize: 16,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  methodItem: {
-    paddingVertical: 15,
-    paddingHorizontal: 10,
-    borderBottomWidth: 1,
-  },
-  methodName: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  methodCountries: {
-    fontSize: 12,
-    opacity: 0.7,
-  },
-});
-
-export default PrayerTimeSettings;
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  </Modal>;
+}
+const styles = StyleSheet.create({ screen: { flex: 1 }, page: { flex: 1, width: '100%', maxWidth: 720, alignSelf: 'center' }, header: { flexDirection: 'row', gap: 12, alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 }, backButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }, body: { flex: 1, minHeight: 0, paddingHorizontal: 22, paddingTop: 14, paddingBottom: 12, gap: 14 }, form: { gap: 16, paddingBottom: 24 }, section: { fontSize: 17, fontWeight: '700', marginTop: 14 }, input: { padding: 13, borderRadius: 12, fontSize: 16, minHeight: 48 }, choice: { padding: 13, borderRadius: 12, minHeight: 44, justifyContent: 'center' }, options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, listRow: { padding: 16, borderBottomWidth: 1 }, toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }, back: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 }, save: { minHeight: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10, flexShrink: 0 }, adjustment: { flexDirection: 'row', alignItems: 'center' }, step: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' } });

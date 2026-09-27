@@ -36,6 +36,8 @@
       "bundler": "metro"
     },
     "plugins": [
+      "./plugins/withAndroidDevelopmentApp",
+      "./plugins/withPrayerAlarmControls",
       [
         "expo-notifications",
         {
@@ -45,7 +47,12 @@
             "./assets/notifications/adhan.wav",
             "./assets/notifications/madinah_adhan.wav",
             "./assets/notifications/makkah_adhan.wav",
-            "./assets/notifications/long_beep.wav"
+            "./assets/notifications/long_beep.wav",
+            "./assets/notifications/sudan_adhan.wav",
+            "./assets/notifications/alafasy_adhan.wav",
+            "./assets/notifications/abdulbasit_adhan.wav",
+            "./assets/notifications/aqsa_adhan.wav",
+            "./assets/notifications/turkey_adhan.wav"
           ]
         }
       ],
@@ -84,9 +91,7 @@
       "url": "https://u.expo.dev/0871aeac-9dd1-4614-b6e6-7614e6b8cade"
     },
     "scheme": "manarat",
-    "runtimeVersion": {
-      "policy": "fingerprint"
-    },
+    "runtimeVersion": "57.0.20-widgets-3",
     "experiments": {
       "reactCompiler": false
     }

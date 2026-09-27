@@ -8,7 +8,8 @@ import { androidPrayerAlarm, getAndroidAlarmStatus, nativeAlarm } from './Androi
 import { PRAYERS, SOUNDS, dateKey, buildPrayerNotifications } from '../utils/prayerNotifications';
 
 const REFRESH_TASK = 'refresh-prayer-notifications';
-const channelId = sound => `prayer-v57-${sound === false ? 'silent' : sound.replace(/\W/g, '-')}`;
+const channelId = (sound, vibrate = false) => `prayer-v57-${vibrate ? 'vibrate' : sound === false ? 'silent' : sound.replace(/\W/g, '-')}`;
+let channelsReady;
 
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({ handleNotification: async notification => ({
@@ -32,14 +33,22 @@ if (Platform.OS !== 'web') {
 
 async function createNotificationChannels() {
   if (Platform.OS !== 'android') return;
+  if (channelsReady) return channelsReady;
+  channelsReady = (async () => {
   for (const sound of [false, 'default', ...Object.values(SOUNDS)]) {
     await Notifications.setNotificationChannelAsync(channelId(sound), {
       name: sound === false ? 'Silent prayer reminders' : `Prayer reminders (${sound})`,
       importance: Notifications.AndroidImportance.HIGH,
-      sound: sound === false ? null : sound,
+      ...(sound === 'default' ? {} : { sound: sound === false ? null : sound }),
       enableVibrate: sound !== false,
     });
   }
+  await Notifications.setNotificationChannelAsync(channelId(false, true), {
+    name: 'Vibrate prayer alerts', importance: Notifications.AndroidImportance.HIGH,
+    sound: null, enableVibrate: true, vibrationPattern: [0, 400, 250, 400, 250, 400],
+  });
+  })().catch(error => { channelsReady = null; throw error; });
+  return channelsReady;
 }
 
 export async function initializeNotifications() {
@@ -59,13 +68,16 @@ export async function requestNotificationPermissions() {
 }
 
 export async function loadNotificationPreferences() {
-  const preferences = JSON.parse(await AsyncStorage.getItem('adhanPreferences') || '{}');
+  const stored = Object.fromEntries(await AsyncStorage.multiGet([
+    'adhanPreferences', 'playAdhan', ...PRAYERS.flatMap(prayer => [`adhan_preference_${prayer}`, `reminder_preference_${prayer}`]),
+  ]));
+  const preferences = JSON.parse(stored.adhanPreferences || '{}');
   const reminders = {};
   for (const prayer of PRAYERS) {
-    preferences[prayer] = await AsyncStorage.getItem(`adhan_preference_${prayer}`) || preferences[prayer] || 'Adhan (Madina)';
-    reminders[prayer] = await AsyncStorage.getItem(`reminder_preference_${prayer}`) || 'None';
+    preferences[prayer] = stored[`adhan_preference_${prayer}`] || preferences[prayer] || 'Adhan (Madina)';
+    reminders[prayer] = stored[`reminder_preference_${prayer}`] || 'None';
   }
-  const enabled = await AsyncStorage.getItem('playAdhan') !== 'false';
+  const enabled = stored.playAdhan !== 'false';
   return { preferences, reminders, enabled };
 }
 
@@ -100,6 +112,10 @@ export function schedulePrayerNotifications(times, preferences, enabled = true, 
     ).sort((a, b) => a.date - b.date).filter(item => item.date - now < 30 * 86400000).slice(0, Platform.OS === 'ios' ? 60 : 300);
     if (Platform.OS === 'android') {
       if (!androidPrayerAlarm) throw new Error('Install the new Android preview APK to enable Azan alarms.');
+      const newSounds = ['Vibrate', 'Adhan (Sudan)', 'Adhan (Mishary Alafasy)', 'Adhan (Abdulbasit)', 'Adhan (Al-Aqsa)', 'Adhan (Turkey)'];
+      if (requests.some(item => !item.reminder && newSounds.includes(item.preference)) && (await getAndroidAlarmStatus())?.audioLibraryVersion !== 2) {
+        throw new Error('Install the updated Android APK to use the new Azans and Vibrate. Your previous schedule is still active.');
+      }
       const count = await androidPrayerAlarm.replaceSchedule(JSON.stringify(requests.map(nativeAlarm)));
       // Only remove the old Expo schedule after the native replacement is safely stored.
       await Promise.all(previous.map(item => Notifications.cancelScheduledNotificationAsync(item.identifier)));
@@ -112,9 +128,9 @@ export function schedulePrayerNotifications(times, preferences, enabled = true, 
           title: item.reminder ? `${item.prayer} Prayer Reminder` : `Time for ${item.prayer} Prayer`,
           body: item.reminder ? `${item.prayer} prayer will be in ${item.reminder} minutes` : `It's time to pray ${item.prayer}`,
           sound: item.sound,
-          data: { prayer: item.prayer, adhanPreference: item.preference, silent: item.sound === false },
+          data: { prayer: item.prayer, adhanPreference: item.preference, silent: item.sound === false, reminder: item.reminder, at: item.date.getTime() },
         },
-        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: item.date, channelId: channelId(item.sound) },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: item.date, channelId: channelId(item.sound, !item.reminder && item.preference === 'Vibrate') },
       }));
     }
     } catch (error) {
@@ -133,10 +149,16 @@ export async function checkScheduledNotifications() {
 }
 
 export { getAndroidAlarmStatus };
+export async function getNextPrayerReminder(prayer) {
+  if (Platform.OS === 'android') return (await getAndroidAlarmStatus())?.nextReminders?.[prayer] || null;
+  if (Platform.OS === 'web') return null;
+  const items = await Notifications.getAllScheduledNotificationsAsync();
+  return items.map(item => item.content.data).filter(data => data?.prayer === prayer && data.reminder > 0 && data.at > Date.now()).sort((a, b) => a.at - b.at)[0]?.at || null;
+}
 export async function scheduleAzanTest(prayer, preference) {
   if (!(await requestNotificationPermissions())) throw new Error('Allow notifications first.');
-  if (preference === 'None') throw new Error('Choose a sound or Silent before testing.');
-  const item = { prayer, preference, sound: preference === 'Silent' ? false : SOUNDS[preference] || 'default', date: new Date(Date.now() + 15000), reminder: 0 };
+  if (preference === 'None') throw new Error('Choose a sound, Vibrate or Silent before testing.');
+  const item = { prayer, preference, sound: ['Silent', 'Vibrate'].includes(preference) ? false : SOUNDS[preference] || 'default', date: new Date(Date.now() + 15000), reminder: 0 };
   if (Platform.OS === 'android') {
     if (!androidPrayerAlarm) throw new Error('Install the new Android preview APK first.');
     const alarm = { ...nativeAlarm(item), id: 'azan-preview-test', test: true };

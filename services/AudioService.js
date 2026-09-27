@@ -1,25 +1,24 @@
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import { Asset } from 'expo-asset';
+import { createAudioPreview } from '../utils/audioPreview';
 
+let configuration;
 export function configureAudio() {
-  return setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix', allowsRecording: false });
+  configuration ||= setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: false,
+    interruptionMode: 'doNotMix', allowsRecording: false }).catch(error => { configuration = null; throw error; });
+  return configuration;
 }
 
-// Manually created Expo players must release their native resources.
-export function playAudio(source, onFinish, title = 'Manarat Al-Muslim') {
-  const player = createAudioPlayer(source);
-  let released = false;
-  const release = () => {
-    if (released) return;
-    released = true;
-    subscription.remove();
-    player.remove();
-  };
-  const subscription = player.addListener('playbackStatusUpdate', status => {
-    if (status.didJustFinish) { release(); onFinish?.(); }
-  });
-  try {
-    player.setActiveForLockScreen(true, { title });
-    player.play();
-  } catch (error) { release(); throw error; }
-  return { pause: () => { if (!released) player.pause(); }, stop: release };
-}
+const previews = createAudioPreview({
+  configure: configureAudio,
+  loadSource: async source => {
+    // Stream verse files directly; do not wait for a whole download before Play.
+    if (typeof source === 'object' && /^(https:|file:)/.test(source.uri)) return source;
+    const asset = typeof source === 'number' ? Asset.fromModule(source) : Asset.fromURI(source.uri || source);
+    await asset.downloadAsync();
+    return { uri: asset.localUri || asset.uri };
+  },
+  createPlayer: source => createAudioPlayer(source, { updateInterval: 50 }),
+});
+export const playAudio = previews.play;
+export const stopAudioPreview = previews.stop;

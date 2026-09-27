@@ -1,0 +1,486 @@
+{
+  "hafs": [
+    {
+      "juz": 1,
+      "key": "1:1",
+      "chapter": 1,
+      "canonicalKey": "1:1",
+      "page": 1,
+      "printedPage": 1
+    },
+    {
+      "juz": 2,
+      "key": "2:142",
+      "chapter": 2,
+      "canonicalKey": "2:142",
+      "page": 22,
+      "printedPage": 22
+    },
+    {
+      "juz": 3,
+      "key": "2:253",
+      "chapter": 2,
+      "canonicalKey": "2:253",
+      "page": 42,
+      "printedPage": 42
+    },
+    {
+      "juz": 4,
+      "key": "3:93",
+      "chapter": 3,
+      "canonicalKey": "3:93",
+      "page": 62,
+      "printedPage": 62
+    },
+    {
+      "juz": 5,
+      "key": "4:24",
+      "chapter": 4,
+      "canonicalKey": "4:24",
+      "page": 82,
+      "printedPage": 82
+    },
+    {
+      "juz": 6,
+      "key": "4:148",
+      "chapter": 4,
+      "canonicalKey": "4:148",
+      "page": 102,
+      "printedPage": 102
+    },
+    {
+      "juz": 7,
+      "key": "5:82",
+      "chapter": 5,
+      "canonicalKey": "5:82",
+      "page": 121,
+      "printedPage": 121
+    },
+    {
+      "juz": 8,
+      "key": "6:111",
+      "chapter": 6,
+      "canonicalKey": "6:111",
+      "page": 142,
+      "printedPage": 142
+    },
+    {
+      "juz": 9,
+      "key": "7:88",
+      "chapter": 7,
+      "canonicalKey": "7:88",
+      "page": 162,
+      "printedPage": 162
+    },
+    {
+      "juz": 10,
+      "key": "8:41",
+      "chapter": 8,
+      "canonicalKey": "8:41",
+      "page": 182,
+      "printedPage": 182
+    },
+    {
+      "juz": 11,
+      "key": "9:93",
+      "chapter": 9,
+      "canonicalKey": "9:93",
+      "page": 201,
+      "printedPage": 201
+    },
+    {
+      "juz": 12,
+      "key": "11:6",
+      "chapter": 11,
+      "canonicalKey": "11:6",
+      "page": 222,
+      "printedPage": 222
+    },
+    {
+      "juz": 13,
+      "key": "12:53",
+      "chapter": 12,
+      "canonicalKey": "12:53",
+      "page": 242,
+      "printedPage": 242
+    },
+    {
+      "juz": 14,
+      "key": "15:1",
+      "chapter": 15,
+      "canonicalKey": "15:1",
+      "page": 262,
+      "printedPage": 262
+    },
+    {
+      "juz": 15,
+      "key": "17:1",
+      "chapter": 17,
+      "canonicalKey": "17:1",
+      "page": 282,
+      "printedPage": 282
+    },
+    {
+      "juz": 16,
+      "key": "18:75",
+      "chapter": 18,
+      "canonicalKey": "18:75",
+      "page": 302,
+      "printedPage": 302
+    },
+    {
+      "juz": 17,
+      "key": "21:1",
+      "chapter": 21,
+      "canonicalKey": "21:1",
+      "page": 322,
+      "printedPage": 322
+    },
+    {
+      "juz": 18,
+      "key": "23:1",
+      "chapter": 23,
+      "canonicalKey": "23:1",
+      "page": 342,
+      "printedPage": 342
+    },
+    {
+      "juz": 19,
+      "key": "25:21",
+      "chapter": 25,
+      "canonicalKey": "25:21",
+      "page": 362,
+      "printedPage": 362
+    },
+    {
+      "juz": 20,
+      "key": "27:56",
+      "chapter": 27,
+      "canonicalKey": "27:56",
+      "page": 382,
+      "printedPage": 382
+    },
+    {
+      "juz": 21,
+      "key": "29:46",
+      "chapter": 29,
+      "canonicalKey": "29:46",
+      "page": 402,
+      "printedPage": 402
+    },
+    {
+      "juz": 22,
+      "key": "33:31",
+      "chapter": 33,
+      "canonicalKey": "33:31",
+      "page": 422,
+      "printedPage": 422
+    },
+    {
+      "juz": 23,
+      "key": "36:28",
+      "chapter": 36,
+      "canonicalKey": "36:28",
+      "page": 442,
+      "printedPage": 442
+    },
+    {
+      "juz": 24,
+      "key": "39:32",
+      "chapter": 39,
+      "canonicalKey": "39:32",
+      "page": 462,
+      "printedPage": 462
+    },
+    {
+      "juz": 25,
+      "key": "41:47",
+      "chapter": 41,
+      "canonicalKey": "41:47",
+      "page": 482,
+      "printedPage": 482
+    },
+    {
+      "juz": 26,
+      "key": "46:1",
+      "chapter": 46,
+      "canonicalKey": "46:1",
+      "page": 502,
+      "printedPage": 502
+    },
+    {
+      "juz": 27,
+      "key": "51:31",
+      "chapter": 51,
+      "canonicalKey": "51:31",
+      "page": 522,
+      "printedPage": 522
+    },
+    {
+      "juz": 28,
+      "key": "58:1",
+      "chapter": 58,
+      "canonicalKey": "58:1",
+      "page": 542,
+      "printedPage": 542
+    },
+    {
+      "juz": 29,
+      "key": "67:1",
+      "chapter": 67,
+      "canonicalKey": "67:1",
+      "page": 562,
+      "printedPage": 562
+    },
+    {
+      "juz": 30,
+      "key": "78:1",
+      "chapter": 78,
+      "canonicalKey": "78:1",
+      "page": 582,
+      "printedPage": 582
+    }
+  ],
+  "duri": [
+    {
+      "juz": 1,
+      "key": "1:1",
+      "chapter": 1,
+      "canonicalKey": "1:2",
+      "page": 1,
+      "printedPage": 1
+    },
+    {
+      "juz": 2,
+      "key": "2:141",
+      "chapter": 2,
+      "canonicalKey": "2:142",
+      "page": 22,
+      "printedPage": 22
+    },
+    {
+      "juz": 3,
+      "key": "2:251",
+      "chapter": 2,
+      "canonicalKey": "2:253",
+      "page": 42,
+      "printedPage": 42
+    },
+    {
+      "juz": 4,
+      "key": "3:91",
+      "chapter": 3,
+      "canonicalKey": "3:92",
+      "page": 62,
+      "printedPage": 62
+    },
+    {
+      "juz": 5,
+      "key": "4:24",
+      "chapter": 4,
+      "canonicalKey": "4:24",
+      "page": 82,
+      "printedPage": 82
+    },
+    {
+      "juz": 6,
+      "key": "4:147",
+      "chapter": 4,
+      "canonicalKey": "4:148",
+      "page": 102,
+      "printedPage": 102
+    },
+    {
+      "juz": 7,
+      "key": "5:85",
+      "chapter": 5,
+      "canonicalKey": "5:83",
+      "page": 122,
+      "printedPage": 121
+    },
+    {
+      "juz": 8,
+      "key": "6:112",
+      "chapter": 6,
+      "canonicalKey": "6:111",
+      "page": 142,
+      "printedPage": 142
+    },
+    {
+      "juz": 9,
+      "key": "7:87",
+      "chapter": 7,
+      "canonicalKey": "7:88",
+      "page": 162,
+      "printedPage": 162
+    },
+    {
+      "juz": 10,
+      "key": "8:41",
+      "chapter": 8,
+      "canonicalKey": "8:41",
+      "page": 182,
+      "printedPage": 182
+    },
+    {
+      "juz": 11,
+      "key": "9:95",
+      "chapter": 9,
+      "canonicalKey": "9:94",
+      "page": 202,
+      "printedPage": 202
+    },
+    {
+      "juz": 12,
+      "key": "11:6",
+      "chapter": 11,
+      "canonicalKey": "11:6",
+      "page": 222,
+      "printedPage": 222
+    },
+    {
+      "juz": 13,
+      "key": "12:53",
+      "chapter": 12,
+      "canonicalKey": "12:53",
+      "page": 242,
+      "printedPage": 242
+    },
+    {
+      "juz": 14,
+      "key": "15:1",
+      "chapter": 15,
+      "canonicalKey": "15:1",
+      "page": 262,
+      "printedPage": 262
+    },
+    {
+      "juz": 15,
+      "key": "17:1",
+      "chapter": 17,
+      "canonicalKey": "17:1",
+      "page": 282,
+      "printedPage": 282
+    },
+    {
+      "juz": 16,
+      "key": "18:74",
+      "chapter": 18,
+      "canonicalKey": "18:75",
+      "page": 302,
+      "printedPage": 302
+    },
+    {
+      "juz": 17,
+      "key": "21:1",
+      "chapter": 21,
+      "canonicalKey": "21:1",
+      "page": 322,
+      "printedPage": 322
+    },
+    {
+      "juz": 18,
+      "key": "23:1",
+      "chapter": 23,
+      "canonicalKey": "23:1",
+      "page": 342,
+      "printedPage": 342
+    },
+    {
+      "juz": 19,
+      "key": "25:21",
+      "chapter": 25,
+      "canonicalKey": "25:21",
+      "page": 362,
+      "printedPage": 362
+    },
+    {
+      "juz": 20,
+      "key": "27:58",
+      "chapter": 27,
+      "canonicalKey": "27:56",
+      "page": 382,
+      "printedPage": 382
+    },
+    {
+      "juz": 21,
+      "key": "29:46",
+      "chapter": 29,
+      "canonicalKey": "29:46",
+      "page": 402,
+      "printedPage": 402
+    },
+    {
+      "juz": 22,
+      "key": "33:31",
+      "chapter": 33,
+      "canonicalKey": "33:31",
+      "page": 422,
+      "printedPage": 422
+    },
+    {
+      "juz": 23,
+      "key": "36:27",
+      "chapter": 36,
+      "canonicalKey": "36:28",
+      "page": 442,
+      "printedPage": 442
+    },
+    {
+      "juz": 24,
+      "key": "39:31",
+      "chapter": 39,
+      "canonicalKey": "39:32",
+      "page": 462,
+      "printedPage": 462
+    },
+    {
+      "juz": 25,
+      "key": "41:46",
+      "chapter": 41,
+      "canonicalKey": "41:47",
+      "page": 482,
+      "printedPage": 482
+    },
+    {
+      "juz": 26,
+      "key": "46:1",
+      "chapter": 46,
+      "canonicalKey": "46:1",
+      "page": 502,
+      "printedPage": 502
+    },
+    {
+      "juz": 27,
+      "key": "51:31",
+      "chapter": 51,
+      "canonicalKey": "51:31",
+      "page": 522,
+      "printedPage": 522
+    },
+    {
+      "juz": 28,
+      "key": "58:1",
+      "chapter": 58,
+      "canonicalKey": "58:1",
+      "page": 542,
+      "printedPage": 542
+    },
+    {
+      "juz": 29,
+      "key": "67:1",
+      "chapter": 67,
+      "canonicalKey": "67:1",
+      "page": 562,
+      "printedPage": 562
+    },
+    {
+      "juz": 30,
+      "key": "78:1",
+      "chapter": 78,
+      "canonicalKey": "78:1",
+      "page": 582,
+      "printedPage": 582
+    }
+  ]
+}

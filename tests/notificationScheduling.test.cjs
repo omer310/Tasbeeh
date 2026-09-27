@@ -57,3 +57,45 @@ test('a failed adjacent-month request does not prevent today’s prayer times lo
   const result = await service.fetchPrayerDays({ city: 'New York', country: 'United States' });
   assert.equal(result[`${now.getFullYear()}-${mm}-${dd}`].Fajr, '05:11'); assert.equal(storage.size, 1);
 });
+test('an older APK rejects newly added sounds before replacing its working schedule', async () => {
+  const { service, cancelled, scheduled } = notificationService('android');
+  await assert.rejects(service.schedulePrayerNotifications(times, { Fajr: 'Vibrate' }, true, {}, { [key]: times }), /updated Android APK/);
+  assert.deepEqual(cancelled, []); assert.deepEqual(scheduled, []);
+});
+
+test('native Vibrate and advance reminder payloads stay distinct', () => {
+  const service = load('services/AndroidPrayerAlarm.js', { 'react-native': { Platform: { OS: 'android' } }, expo: { requireOptionalNativeModule: () => ({}) } });
+  const item = { prayer: 'Fajr', preference: 'Vibrate', sound: false, date: tomorrow, reminder: 0 };
+  assert.equal(service.nativeAlarm(item).sound, 'vibrate');
+  assert.equal(service.nativeAlarm({ ...item, reminder: 15 }).sound, 'default');
+  assert.equal(service.nativeAlarm({ ...item, reminder: 15 }).reminder, 15);
+  for (const [preference, sound] of Object.entries(service.ANDROID_SOUNDS)) {
+    assert.equal(service.nativeAlarm({ ...item, preference, sound: 'bundled.wav' }).sound, sound);
+    assert.ok(fs.existsSync(path.join(__dirname, '../modules/prayer-alarm/android/src/main/res/raw', `${sound}.mp3`)));
+  }
+});
+test('next reminder reads the persisted native schedule instead of inferring one from the setting', async () => {
+  const service = load('services/NotificationService.js', {
+    'expo-notifications': { setNotificationHandler() {} }, 'expo-background-task': {}, 'expo-task-manager': { defineTask() {} },
+    '@react-native-async-storage/async-storage': {}, 'react-native': { Platform: { OS: 'android' } }, './PrayerTimesService': {},
+    './AndroidPrayerAlarm': { getAndroidAlarmStatus: async () => ({ nextReminders: { Fajr: 987654321 } }) },
+  });
+  assert.equal(await service.getNextPrayerReminder('Fajr'), 987654321);
+  assert.equal(await service.getNextPrayerReminder('Isha'), null);
+});
+test('turning alerts off during a pending permission prompt cannot be undone by the old enable request', async () => {
+  let grant; const permission = new Promise(resolve => { grant = resolve; });
+  const storage = new Map(), scheduled = [];
+  const service = load('services/PrayerSettingsService.js', {
+    '@react-native-async-storage/async-storage': { getItem: async key => storage.get(key), setItem: async (key, value) => storage.set(key, value) },
+    './PrayerTimesService': { readPrayerCache: async () => { throw Error('Disabled alerts must not fetch prayer data'); } },
+    './NotificationService': { requestNotificationPermissions: () => permission,
+      loadNotificationPreferences: async () => ({ preferences: {}, reminders: {}, enabled: storage.get('playAdhan') !== 'false' }),
+      schedulePrayerNotifications: async (_, __, enabled) => scheduled.push(enabled) },
+  });
+  const on = service.savePrayerAlertsEnabled(true);
+  await new Promise(resolve => setImmediate(resolve));
+  await service.savePrayerAlertsEnabled(false);
+  grant(true); await on;
+  assert.equal(storage.get('playAdhan'), 'false'); assert.ok(scheduled.length > 0); assert.ok(scheduled.every(value => value === false));
+});

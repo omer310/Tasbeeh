@@ -1,124 +1,34 @@
 import React, { useState } from 'react';
-import { Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { useDua } from '../contexts/DuaContext';
+import { PageHeader } from './ScreenUI';
 
-const AddCustomDua = ({ route, navigation }) => {
-  const { isDarkMode, themeColors } = route.params;
-  const { onAddCustomDua, hydrated } = useDua();
-
-  const [title, setTitle] = useState('');
-  const [titleAr, setTitleAr] = useState('');
-  const [arabic, setArabic] = useState('');
-  const [transliteration, setTransliteration] = useState('');
-  const [translation, setTranslation] = useState('');
-
-  const handleSave = () => {
-    if (hydrated && title.trim() && arabic.trim() && translation.trim()) {
-      const newDua = {
-        title,
-        titleAr,
-        arabic,
-        transliteration,
-        translation,
-      };
-      onAddCustomDua(newDua);
-      navigation.goBack();
-    } else {
-      Alert.alert('Error', 'Please fill in at least the title, Arabic text, and translation.');
-    }
+export default function AddCustomDua({ route, navigation, themeColors, language }) {
+  const t = themeColors || route.params.themeColors;
+  const ar = (language || route.params.language) === 'ar';
+  const { onAddCustomDua, hydrated, storageError } = useDua();
+  const [form, setForm] = useState({ title: '', titleAr: '', arabic: '', transliteration: '', translation: '' });
+  const [error, setError] = useState('');
+  const save = () => {
+    if (!hydrated) return;
+    if (!form.title.trim() || ![form.arabic, form.translation].some(text => text.trim())) { setError(ar ? 'أضف عنواناً ونص الدعاء.' : 'Add a title and your Dua in Arabic or English.'); return; }
+    const value = Object.fromEntries(Object.entries(form).map(([key, text]) => [key, text.trim()]));
+    onAddCustomDua({ ...value, ...(ar ? { titleAr: value.title, translationAr: value.translation } : {}) });
+    navigation.popTo('DuasHome', { showSaved: true });
   };
-
-  return (
-    <ScrollView style={[styles.container, { backgroundColor: isDarkMode ? '#1E1E1E' : themeColors.backgroundColor }]}>
-      <TouchableOpacity accessibilityRole="button" onPress={() => navigation.goBack()} style={{ paddingVertical: 12 }}><Text style={{ color: themeColors.activeTabColor }}>Back to Duas</Text></TouchableOpacity>
-      <Text style={[styles.label, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}>Title</Text>
-      <TextInput
-        style={[styles.input, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor, borderColor: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}
-        value={title}
-        onChangeText={setTitle}
-        placeholder="Enter title"
-        placeholderTextColor={isDarkMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)'}
-      />
-
-      <Text style={[styles.label, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}>Arabic Title</Text>
-      <TextInput
-        style={[styles.input, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor, borderColor: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}
-        value={titleAr}
-        onChangeText={setTitleAr}
-        placeholder="Enter Arabic title"
-        placeholderTextColor={isDarkMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)'}
-      />
-
-      <Text style={[styles.label, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}>Arabic Text</Text>
-      <TextInput
-        style={[styles.input, styles.multilineInput, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor, borderColor: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}
-        value={arabic}
-        onChangeText={setArabic}
-        placeholder="Enter Arabic text"
-        placeholderTextColor={isDarkMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)'}
-        multiline
-      />
-
-      <Text style={[styles.label, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}>Transliteration</Text>
-      <TextInput
-        style={[styles.input, styles.multilineInput, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor, borderColor: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}
-        value={transliteration}
-        onChangeText={setTransliteration}
-        placeholder="Enter transliteration"
-        placeholderTextColor={isDarkMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)'}
-        multiline
-      />
-
-      <Text style={[styles.label, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}>Translation</Text>
-      <TextInput
-        style={[styles.input, styles.multilineInput, { color: isDarkMode ? '#FFFFFF' : themeColors.textColor, borderColor: isDarkMode ? '#FFFFFF' : themeColors.textColor }]}
-        value={translation}
-        onChangeText={setTranslation}
-        placeholder="Enter translation"
-        placeholderTextColor={isDarkMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)'}
-        multiline
-      />
-
-      <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-        <Text style={styles.saveButtonText}>Save Dua</Text>
-      </TouchableOpacity>
+  const fields = [
+    ['title', ar ? 'العنوان' : 'Title', ar ? 'اسم يسهل تذكره' : 'A name you will remember', false],
+    ['arabic', ar ? 'نص الدعاء بالعربية' : 'Arabic Dua', ar ? 'اكتب دعاءك…' : 'Write or paste the Arabic…', true],
+    ['translation', ar ? 'المعنى أو الدعاء بلغتك' : 'Meaning or your own words', ar ? 'اكتب دعاءك بلغتك…' : 'Write your Dua in your own words…', true],
+    ['transliteration', ar ? 'النطق · اختياري' : 'Pronunciation · optional', ar ? 'النطق بالحروف اللاتينية' : 'Transliteration, if helpful', true],
+  ];
+  return <KeyboardAvoidingView style={{ flex: 1, backgroundColor: t.backgroundColor }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <PageHeader title={ar ? 'إضافة دعاء' : 'Add a Dua'} subtitle={ar ? 'كلماتك، قريبة منك' : 'Keep your own words close'} onBack={() => navigation.goBack()} theme={t} />
+    <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.form}>
+      {fields.map(([key, label, placeholder, multiline]) => <View key={key} style={{ gap: 8 }}><Text style={{ color: t.textColor, fontSize: 14, fontWeight: '600' }}>{label}</Text><TextInput accessibilityLabel={label} value={form[key]} onChangeText={value => setForm(old => ({ ...old, [key]: value }))} placeholder={placeholder} placeholderTextColor={t.secondaryTextColor} multiline={multiline} textAlignVertical="top" style={[styles.input, { minHeight: multiline ? 94 : 48, color: t.textColor, borderColor: t.separatorColor, backgroundColor: t.cardColor }, key === 'arabic' && { fontFamily: 'Amiri', fontSize: 20, lineHeight: 32, textAlign: 'right', writingDirection: 'rtl' }]} /></View>)}
+      {!!(error || storageError) && <Text accessibilityRole="alert" style={{ color: t.errorColor }}>{error || storageError}</Text>}
+      <TouchableOpacity accessibilityRole="button" disabled={!hydrated} onPress={save} style={[styles.save, { backgroundColor: '#287457', opacity: hydrated ? 1 : 0.5 }]}><Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{ar ? 'حفظ في أدعيتي' : 'Save to My Duas'}</Text></TouchableOpacity>
     </ScrollView>
-  );
-};
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 5,
-    padding: 10,
-    marginBottom: 15,
-    fontSize: 16,
-  },
-  multilineInput: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  saveButton: {
-    backgroundColor: '#4CAF50',
-    padding: 15,
-    borderRadius: 5,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-});
-
-export default AddCustomDua;
+  </KeyboardAvoidingView>;
+}
+const styles = StyleSheet.create({ form: { paddingHorizontal: 22, paddingBottom: 32, gap: 20 }, input: { borderRadius: 16, borderWidth: 1, padding: 15, fontSize: 14, lineHeight: 22 }, save: { padding: 17, borderRadius: 16, alignItems: 'center', marginTop: 4 } });

@@ -4,6 +4,11 @@ const SOUNDS = {
   'Adhan (Madina)': 'madinah_adhan.wav',
   'Adhan (Makka)': 'makkah_adhan.wav',
   'Long beep': 'long_beep.wav',
+  'Adhan (Sudan)': 'sudan_adhan.wav',
+  'Adhan (Mishary Alafasy)': 'alafasy_adhan.wav',
+  'Adhan (Abdulbasit)': 'abdulbasit_adhan.wav',
+  'Adhan (Al-Aqsa)': 'aqsa_adhan.wav',
+  'Adhan (Turkey)': 'turkey_adhan.wav',
 };
 const REMINDERS = {
   '5 minutes before': 5, '10 minutes before': 10,
@@ -15,7 +20,7 @@ function dateKey(date = new Date(), timeZone) {
   const get = type => parts.find(part => part.type === type).value;
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
-function prayerDate(time, day = new Date(), timeZone) {
+function prayerDate(time, day = new Date(), timeZone, reusableFormatter) {
   const match = /^(\d{1,2}):(\d{2})(?:\s|$)/.exec(String(time));
   if (!match || +match[1] > 23 || +match[2] > 59) return null;
   const date = new Date(day);
@@ -23,7 +28,7 @@ function prayerDate(time, day = new Date(), timeZone) {
   if (!timeZone) return date;
   const desired = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate(), +match[1], +match[2]);
   let instant = desired;
-  const formatter = new Intl.DateTimeFormat('en-US', {
+  const formatter = reusableFormatter || new Intl.DateTimeFormat('en-US', {
     timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
   });
@@ -37,7 +42,7 @@ function prayerDate(time, day = new Date(), timeZone) {
   return new Date(instant);
 }
 function notificationSound(preference) {
-  if (preference === 'Silent' || preference === 'None') return false;
+  if (preference === 'Silent' || preference === 'None' || preference === 'Vibrate') return false;
   return SOUNDS[preference] || 'default';
 }
 function buildPrayerNotifications(times, preferences, reminders = {}, now = new Date(), day = now) {

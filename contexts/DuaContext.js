@@ -28,6 +28,7 @@ export function DuaProvider({ children }) {
     onAddNote: (id, note, dua) => update({ type: 'note', dua: dua || state.myDuas.find(item => item.id === id) || { id, title: 'Dua' }, note }),
     onAddToCollection: dua => update({ type: 'collect', dua }),
     onAddCustomDua: dua => update({ type: 'custom', dua: { ...dua, id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` } }),
+    onDeleteCustomDua: id => update({ type: 'deleteCustom', id }),
     getDuaNote: id => state.notes[id] || '',
   }}>{children}</DuaContext.Provider>;
 }

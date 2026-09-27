@@ -1,0 +1,5 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/prayer_cell" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal" android:gravity="center" android:layout_margin="1dp" android:padding="2dp">
+  <TextView android:id="@+id/prayer_cell_name" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:textSize="11sp" android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" android:gravity="start" />
+  <TextView android:id="@+id/prayer_cell_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="14sp" android:textStyle="bold" android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" android:gravity="center"  />
+  <TextView android:id="@+id/prayer_cell_period" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="9sp" android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" android:gravity="center" android:layout_marginStart="3dp" />
+</LinearLayout>

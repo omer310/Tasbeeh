@@ -1,0 +1,11 @@
+{
+  "sourceChapters": 132,
+  "sourceEntries": 267,
+  "readingCategories": 133,
+  "readingCards": 302,
+  "apiEntriesWithoutRepresentation": [],
+  "arabicSource": "https://github.com/asellam/HisnElMuslim",
+  "englishSource": "https://www.hisnmuslim.com/api/en/husn_en.json",
+  "reviewDate": "2026-09-07",
+  "note": "Combined source entries are split into reading cards in the Arabic edition. Morning and evening have separate sequences. English API results are fetched and cached on device; split variants use original English renderings."
+}

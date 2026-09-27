@@ -1,379 +1,74 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Image, Animated, Platform } from 'react-native';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, Image, ActivityIndicator, StyleSheet, useWindowDimensions } from 'react-native';
+import BottomSheet from './BottomSheet';
 import { Ionicons } from '@expo/vector-icons';
-import { scheduleAzanTest, getAndroidAlarmStatus } from '../services/NotificationService';
-import { androidPrayerAlarm } from '../services/AndroidPrayerAlarm';
-import { playAudio } from '../services/AudioService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Picker } from '@react-native-picker/picker';
+import { playAudio } from '../services/AudioService';
+import { ADHAN_OPTIONS as OPTIONS } from '../data/adhanOptions';
+import { getNextPrayerReminder } from '../services/NotificationService';
+import { createPreferenceSelection } from '../utils/preferenceSelection';
 
-const AdhanPreferencesModal = ({ isVisible, onClose, prayer, themeColors, onPreferenceChange }) => {
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState(null);
-  const [selectedAdhan, setSelectedAdhan] = useState('Adhan (Madina)');
-  const [selectedReminder, setSelectedReminder] = useState('None');
-  const [animation] = useState(new Animated.Value(0));
-  const sound = useRef(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playingAdhan, setPlayingAdhan] = useState(null);
+const REMINDERS = ['None', '5 minutes before', '10 minutes before', '15 minutes before', '30 minutes before', '1 hour before'];
 
-  useEffect(() => {
+export default function AdhanPreferencesModal({ isVisible, onClose, prayer, themeColors: t, onPreferenceChange }) {
+  const { height } = useWindowDimensions();
+  const [selected, setSelected] = useState('Adhan (Madina)');
+  const [reminder, setReminder] = useState('None');
+  const [reminderOpen, setReminderOpen] = useState(false);
+  const [error, setError] = useState('');
+  const [playing, setPlaying] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [nextReminder, setNextReminder] = useState(null);
+  const selection = useRef(null), savePreference = useRef(onPreferenceChange), touched = useRef(false);
+  const audio = useRef(null);
+  useLayoutEffect(() => { savePreference.current = onPreferenceChange; }, [onPreferenceChange]);
+  const stop = () => { audio.current?.stop(); audio.current = null; setPlaying(null); setLoading(false); };
+  useLayoutEffect(() => {
     if (!isVisible || !prayer) return;
+    touched.current = false; setSaving(false); setError(''); setReminderOpen(false); setNextReminder(null);
+    const model = createPreferenceSelection({
+      defaults: { sound: 'Adhan (Madina)', advance: 'None' },
+      load: async () => {
+        const values = await AsyncStorage.multiGet([`adhan_preference_${prayer}`, `reminder_preference_${prayer}`]);
+        return { sound: values[0][1] || 'Adhan (Madina)', advance: values[1][1] || 'None' };
+      },
+      save: async value => { await savePreference.current(prayer, value.sound, value.advance); return getNextPrayerReminder(prayer); },
+      onChange: value => { setSelected(value.sound); setReminder(value.advance); },
+      onSaving: setSaving,
+      onError: error => setError(error ? error.message || 'Could not save your choice. Tap it again to retry.' : ''),
+      onSaved: setNextReminder,
+    });
+    selection.current = model;
+    void model.hydrate();
     let active = true;
-    setMessage(''); setBusy(true);
-    Promise.all([
-      AsyncStorage.getItem(`adhan_preference_${prayer}`),
-      AsyncStorage.getItem(`reminder_preference_${prayer}`), getAndroidAlarmStatus(),
-    ]).then(([adhan, reminder, current]) => {
-      if (active) { setSelectedAdhan(adhan || 'Adhan (Madina)'); setSelectedReminder(reminder || 'None'); setStatus(current); }
-    }).catch(e => { if (active) setMessage(e.message); }).finally(() => { if (active) setBusy(false); });
-    return () => { active = false; };
-  }, [prayer, isVisible]);
-
-  useEffect(() => {
-    if (isVisible) {
-      Animated.spring(animation, {
-        toValue: 1,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.spring(animation, {
-        toValue: 0,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [isVisible, animation]);
-
-  const adhanOptions = [
-    { name: 'None', icon: 'ban-outline' },
-    { name: 'Silent', icon: 'volume-mute-outline' },
-    { name: 'Default notification sound', icon: 'notifications-outline' },
-    { name: 'Adhan (Nureyn Mohammad)', image: require('../assets/adhan-icon.png'), flag: '🇸🇩', country: 'Sudan', sound: require('../assets/adhan.mp3') },
-    { name: 'Adhan (Madina)', image: require('../assets/adhan-icon.png'), flag: '🇸🇦', country: 'Saudi Arabia', sound: require('../assets/madinah_adhan.mp3') },
-    { name: 'Adhan (Makka)', image: require('../assets/adhan-icon.png'), flag: '🇸🇦', country: 'Saudi Arabia', sound: require('../assets/makkah_adhan.mp3') },
-    { name: 'Long beep', icon: 'alarm-outline', sound: require('../assets/long_beep.mp3') }
-  ];
-
-  async function playSound(soundFile, adhanName) {
-    try {
-      sound.current?.stop();
-      sound.current = playAudio(soundFile, () => {
-        sound.current = null;
-        setIsPlaying(false);
-        setPlayingAdhan(null);
-      }, adhanName);
-      setIsPlaying(true);
-      setPlayingAdhan(adhanName);
-    } catch {
-      setIsPlaying(false);
-      setPlayingAdhan(null);
-      setMessage('Unable to preview this sound. Please try again.');
-    }
-  }
-
-  function pauseSound() {
-    sound.current?.pause();
-    setIsPlaying(false);
-  }
-
-  function stopAndPlayFromStart(soundFile, adhanName) { playSound(soundFile, adhanName); }
-
-  useEffect(() => () => { sound.current?.stop(); }, []);
-  useEffect(() => {
-    if (!isVisible) { sound.current?.stop(); sound.current = null; setIsPlaying(false); setPlayingAdhan(null); }
-  }, [isVisible]);
-
-  const handleClose = () => {
-    sound.current?.stop(); sound.current = null;
-    setIsPlaying(false); setPlayingAdhan(null); onClose();
+    getNextPrayerReminder(prayer).then(value => { if (active && !touched.current && selection.current === model) setNextReminder(value); }).catch(() => {});
+    return () => { active = false; model.dispose(); selection.current = null; audio.current?.stop(); audio.current = null; };
+  }, [isVisible, prayer]);
+  const close = () => { stop(); onClose(); };
+  const save = patch => { touched.current = true; stop(); setNextReminder(null); void selection.current?.choose(patch); };
+  const preview = option => {
+    if (playing === option.name) { stop(); return; }
+    stop(); setError(''); setPlaying(option.name);
+    audio.current = playAudio(option.sound, {
+      onState: state => { setLoading(state === 'loading'); if (state === 'idle') setPlaying(null); },
+      onError: e => setError(e.message || 'Could not play this sound.'),
+    });
   };
-
-  const saveSelection = async (adhan, reminder) => {
-    if (busy) return;
-    setBusy(true); setMessage('');
-    sound.current?.stop(); sound.current = null; setIsPlaying(false); setPlayingAdhan(null);
-    try {
-      await onPreferenceChange(prayer, adhan, reminder);
-      setSelectedAdhan(adhan); setSelectedReminder(reminder);
-      setStatus(await getAndroidAlarmStatus());
-    } catch (e) { setMessage(e.message || 'Could not save this preference.'); }
-    finally { setBusy(false); }
-  };
-  const handleReminderSelection = option => saveSelection(selectedAdhan, option.name);
-  const handleAdhanSelection = option => saveSelection(option.name, selectedReminder);
-  const testDelivery = async () => {
-    setMessage(''); setBusy(true);
-    sound.current?.stop(); sound.current = null; setIsPlaying(false);
-    try {
-      await scheduleAzanTest(prayer, selectedAdhan);
-      setMessage('Test scheduled in 15 seconds. Lock your screen now. Use Stop Azan on the notification to end playback.');
-    } catch (e) { setMessage(e.message); }
-    finally { setBusy(false); setStatus(await getAndroidAlarmStatus()); }
-  };
-
-  const reminderOptions = [
-    { name: 'None', icon: 'ban-outline' },
-    { name: '5 minutes before', icon: 'time-outline' },
-    { name: '10 minutes before', icon: 'time-outline' },
-    { name: '15 minutes before', icon: 'time-outline' },
-    { name: '30 minutes before', icon: 'time-outline' },
-    { name: '1 hour before', icon: 'time-outline' },
-  ];
-
-  const renderReminderDropdown = (options, selectedValue, onValueChange, label) => (
-    <View style={[styles.dropdownContainer, { borderColor: themeColors.separatorColor }]}>
-      <Text style={[styles.dropdownLabel, { color: themeColors.secondaryTextColor }]}>
-        {label}
-      </Text>
-      <View style={[
-        styles.pickerContainer, 
-        { 
-          backgroundColor: themeColors.backgroundColor,
-          borderColor: themeColors.separatorColor 
-        }
-      ]}>
-        <Picker
-          enabled={!busy}
-          selectedValue={selectedValue}
-          onValueChange={onValueChange}
-          dropdownIconColor={themeColors.textColor}
-          style={[styles.picker, { color: themeColors.textColor }]}
-          mode="dropdown"
-        >
-          {options.map((option, index) => (
-            <Picker.Item 
-              key={index}
-              label={option.name}
-              value={option.name}
-              color={themeColors.textColor}
-            />
-          ))}
-        </Picker>
-      </View>
-    </View>
-  );
-
-  return (
-    <Modal
-      animationType="none"
-      transparent={true}
-      visible={isVisible}
-      onRequestClose={handleClose}
-    >
-      <View style={styles.modalContainer}>
-        <Animated.View
-          style={[
-            styles.modalContent,
-            {
-              backgroundColor: themeColors.backgroundColor,
-              transform: [
-                {
-                  translateY: animation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [300, 0],
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
-          <View style={styles.header}>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close Azan settings" style={styles.closeButton} onPress={handleClose}>
-              <Ionicons name="close" size={24} color={themeColors.textColor} />
+  return <BottomSheet visible={isVisible} title={prayer} subtitle="Sound & reminder" onClose={close} theme={t} height={height * 0.5} contentStyle={{ paddingHorizontal: 18 }}>
+          {!!error && <Text accessibilityRole="alert" style={{ color: t.errorColor, paddingVertical: 10 }}>{error}</Text>}
+          {saving && <Text accessibilityLiveRegion="polite" style={{ color: t.secondaryTextColor, fontSize: 12 }}>Updating alerts…</Text>}
+          {!saving && reminder !== 'None' && <Text style={{ color: t.secondaryTextColor, fontSize: 12 }}>{nextReminder ? `Next reminder: ${new Date(nextReminder).toLocaleString()}` : 'No reminder scheduled yet. Check that prayer alerts and permissions are enabled.'}</Text>}
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Reminder: ${reminder}`} accessibilityState={{ expanded: reminderOpen }} onPress={() => setReminderOpen(value => !value)} style={[styles.reminder, { backgroundColor: t.inputBackground, minHeight: 48, paddingRight: 14, gap: 10 }]}><Text style={{ color: t.textColor, fontSize: 13 }}>Remind me</Text><Text style={{ color: t.secondaryTextColor, flex: 1, textAlign: 'right', fontSize: 13 }}>{reminder}</Text><Ionicons name={reminderOpen ? 'chevron-up' : 'chevron-down'} size={16} color={t.textColor} /></TouchableOpacity>
+          {reminderOpen && <View style={{ backgroundColor: t.inputBackground, borderRadius: 14, marginBottom: 10 }}>{REMINDERS.map(value => <TouchableOpacity key={value} accessibilityRole="radio" accessibilityState={{ checked: reminder === value }} onPress={() => { setReminderOpen(false); save({ advance: value }); }} style={{ minHeight: 44, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}><Text style={{ color: t.textColor }}>{value}</Text>{reminder === value && <Ionicons name="checkmark" size={19} color={t.activeTabColor} />}</TouchableOpacity>)}</View>}
+          {OPTIONS.map(option => <View key={option.name} style={[styles.option, { backgroundColor: selected === option.name ? t.inputBackground : 'transparent', borderColor: selected === option.name ? t.activeTabColor : 'transparent' }]}>
+            <TouchableOpacity accessibilityRole="radio" accessibilityLabel={option.name} accessibilityState={{ checked: selected === option.name }} onPress={() => save({ sound: option.name })} style={styles.choice}>
+              {option.icon ? <Ionicons name={option.icon} size={22} color={t.textColor} /> : <Image source={require('../assets/adhan-icon.png')} style={{ width: 25, height: 25, tintColor: t.textColor, resizeMode: 'contain' }} />}
+              <View style={{ flex: 1, gap: 3 }}><Text style={{ color: t.textColor, fontSize: 14, fontWeight: '500' }}>{option.name}</Text>{!!option.country && <Text style={{ color: t.secondaryTextColor, fontSize: 11 }}>{option.country}</Text>}</View>
+              {selected === option.name && <Ionicons name="checkmark-circle" color={t.activeTabColor} size={19} />}
             </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: themeColors.textColor }]}>{prayer}</Text>
-          </View>
-          <View style={[styles.separator, { backgroundColor: themeColors.separatorColor }]} />
-          
-          {Platform.OS !== 'web' && <View style={{ gap: 8, marginBottom: 12 }}>
-            <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={testDelivery} style={{ padding: 12, borderRadius: 10, backgroundColor: themeColors.inputBackground }}>
-              <Text style={{ color: themeColors.activeTabColor, fontWeight: '600' }}>Test with screen locked (15 seconds)</Text>
-            </TouchableOpacity>
-            {status && !status.exact && <TouchableOpacity accessibilityRole="button" onPress={() => androidPrayerAlarm?.openAlarmSettings()}><Text style={{ color: themeColors.activeTabColor }}>Allow Alarms & reminders for on-time Azan</Text></TouchableOpacity>}
-            <Text style={{ color: themeColors.secondaryTextColor, fontSize: 12 }}>Uses notification volume. Silent mode and Do Not Disturb mute Azan.</Text>
-            {status?.lastEvent && <Text style={{ color: themeColors.secondaryTextColor, fontSize: 12 }}>{status.lastEvent}</Text>}
-          </View>}
-          {!!message && <Text accessibilityRole="alert" style={{ color: themeColors.textColor, marginBottom: 12 }}>{message}</Text>}
-          {/* Pre-Adhan Reminder Dropdown */}
-          {renderReminderDropdown(
-            reminderOptions,
-            selectedReminder,
-            (value) => handleReminderSelection({ name: value }),
-            "Pre-Adhan Reminder"
-          )}
-
-          {/* Adhan Options List */}
-          <Text style={[styles.sectionTitle, { color: themeColors.secondaryTextColor }]}>Adhan Sound</Text>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {adhanOptions.map((option, index) => (
-              <TouchableOpacity
-                key={index}
-                accessibilityRole="radio" accessibilityState={{ checked: selectedAdhan === option.name }} accessibilityLabel={option.name} disabled={busy}
-                style={[
-                  styles.optionItem,
-                  selectedAdhan === option.name && styles.selectedOption,
-                  { backgroundColor: selectedAdhan === option.name ? themeColors.activeTabColor + '20' : 'transparent' }
-                ]}
-                onPress={() => handleAdhanSelection(option)}
-              >
-                <View style={styles.optionLeft}>
-                  {option.image ? (
-                    <Image source={option.image} style={styles.optionIcon} />
-                  ) : (
-                    <Ionicons name={option.icon} size={24} color={themeColors.textColor} />
-                  )}
-                  <View style={styles.optionTextContainer}>
-                    <Text style={[styles.optionText, { color: themeColors.textColor }]}>{option.name}</Text>
-                    {option.country && (
-                      <Text style={[styles.countryText, { color: themeColors.secondaryTextColor }]}>
-                        {option.flag} {option.country}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-                <View style={styles.optionRight}>
-                  {selectedAdhan === option.name ? (
-                    <Ionicons name="checkmark-circle" size={24} color={themeColors.activeTabColor} />
-                  ) : null}
-                  {option.sound && (
-                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Preview ${option.name}`}
-                      onPress={() => {
-                        if (playingAdhan === option.name && isPlaying) {
-                          pauseSound();
-                        } else {
-                          stopAndPlayFromStart(option.sound, option.name);
-                        }
-                      }} 
-                      style={styles.previewButton}
-                    >
-                      <Ionicons 
-                        name={playingAdhan === option.name && isPlaying ? "pause-circle-outline" : "play-circle-outline"} 
-                        size={24} 
-                        color={themeColors.activeTabColor} 
-                      />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </Animated.View>
-      </View>
-    </Modal>
-  );
-};
-
-const styles = StyleSheet.create({
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-  },
-  modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '90%',
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: -3,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 5,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  closeButton: {
-    padding: 5,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginLeft: 15,
-  },
-  separator: {
-    height: 1,
-    marginBottom: 15,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginVertical: 10,
-  },
-  optionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    marginBottom: 8,
-  },
-  optionItemFirst: {
-    marginBottom: 20,
-  },
-  selectedOption: {
-    borderWidth: 1,
-    borderColor: 'rgba(128, 128, 128, 0.2)',
-  },
-  optionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  optionTextContainer: {
-    marginLeft: 15,
-    flex: 1,
-  },
-  optionText: {
-    fontSize: 16,
-  },
-  countryText: {
-    fontSize: 14,
-    marginTop: 2,
-  },
-  optionRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  previewButton: {
-    marginLeft: 10,
-    padding: 5,
-  },
-  previewText: {
-    marginLeft: 8,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  optionIcon: {
-    width: 24,
-    height: 24,
-    resizeMode: 'contain',
-  },
-  dropdownContainer: {
-    marginBottom: 20,
-    padding: 10,
-  },
-  dropdownLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  pickerContainer: {
-    borderRadius: 10,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  picker: {
-    height: 50,
-    width: '100%',
-  },
-});
-
-export default AdhanPreferencesModal;
+            {!!option.sound && <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${playing === option.name ? 'Stop' : 'Preview'} ${option.name}`} onPress={() => preview(option)} style={styles.control}>{playing === option.name && loading ? <ActivityIndicator size="small" color={t.activeTabColor} /> : <Ionicons name={playing === option.name ? 'stop-circle-outline' : 'play-circle-outline'} size={26} color={t.activeTabColor} />}</TouchableOpacity>}
+          </View>)}
+  </BottomSheet>;
+}
+const styles = StyleSheet.create({ scrim: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' }, sheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26 }, handle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 9 }, header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 22, paddingVertical: 12 }, control: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, reminder: { flexDirection: 'row', alignItems: 'center', paddingLeft: 14, borderRadius: 13, marginBottom: 8 }, option: { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, marginBottom: 4 }, choice: { flex: 1, flexDirection: 'row', gap: 12, alignItems: 'center', minHeight: 60, paddingHorizontal: 12, paddingVertical: 10 } });
