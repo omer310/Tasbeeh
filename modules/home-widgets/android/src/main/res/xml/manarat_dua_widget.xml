@@ -1,0 +1,6 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+  android:minWidth="200dp" android:minHeight="240dp" android:minResizeWidth="200dp" android:minResizeHeight="220dp"
+  android:targetCellWidth="3" android:targetCellHeight="3" android:resizeMode="horizontal|vertical"
+  android:initialLayout="@layout/manarat_dua_widget" android:previewLayout="@layout/manarat_dua_preview"
+  android:configure="expo.modules.homewidgets.DuaWidgetConfigurationActivity" android:widgetFeatures="reconfigurable"
+  android:description="@string/manarat_dua_description" android:updatePeriodMillis="1800000" android:widgetCategory="home_screen" />

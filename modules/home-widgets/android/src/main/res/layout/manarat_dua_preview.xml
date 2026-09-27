@@ -1,0 +1,5 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="@drawable/manarat_widget_light" android:padding="16dp">
+  <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/manarat_dua_widget" android:textSize="16sp" android:textStyle="bold" android:textColor="#19382B" />
+  <TextView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center" android:text="بِسْمِ اللَّهِ، تَوَكَّلْتُ عَلَى اللَّهِ، وَلَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ" android:textSize="22sp" android:fontFamily="serif" android:textDirection="rtl" android:textColor="#19382B" />
+  <TextView android:layout_width="match_parent" android:layout_height="44dp" android:gravity="center" android:text="‹         1 / 4         ›" android:textSize="18sp" android:textColor="#536F5F" />
+</LinearLayout>

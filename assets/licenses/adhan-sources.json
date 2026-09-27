@@ -1,0 +1,33 @@
+[
+  {
+    "sha256": "7889FB396F7D29DEBF1258C4D522D43FE680C786A9D9F06D4542D22CEBE58FB8",
+    "source": "https://raw.githubusercontent.com/Kiwifu/adhan-mp3/main/Mishary_Rashid_Alafasy_1_-_Kuwait_(مشاري_راشد_العفاسي_-_الكويت).mp3",
+    "file": "prayer_alafasy.mp3",
+    "size": 1931082
+  },
+  {
+    "sha256": "7647B908B03AB1944B1497D8CBBD726F26A288435CF35011F26B1593F7D0202D",
+    "source": "https://raw.githubusercontent.com/Kiwifu/adhan-mp3/main/Abdulbasit_Abdusamad_1_-_Egypt_(عبد_الباسط_عبد_الصمد_-_مصر).mp3",
+    "file": "prayer_abdulbasit.mp3",
+    "size": 489872
+  },
+  {
+    "sha256": "05B894088DFE7133A2A7C1F1BF52056372CD309A6A0B9B558833CC5E44C86D61",
+    "source": "https://raw.githubusercontent.com/Kiwifu/adhan-mp3/main/Adhan_Al_Aqsa_-_Jerusalem_(أذان_المسجد_الأقصى_-_القدس).mp3",
+    "file": "prayer_aqsa.mp3",
+    "size": 307298
+  },
+  {
+    "sha256": "B2450319BAB4D748D3647BF1F50008EA1E7D305F0CE1FA54AE9FA96E63259A0D",
+    "source": "https://raw.githubusercontent.com/Kiwifu/adhan-mp3/main/Adhan_Turkey_1_(أذان_تركيا).mp3",
+    "file": "prayer_turkey.mp3",
+    "size": 360584
+  },
+  {
+    "source": "User-supplied workspace asset: assets/Sudanese Athan.mp3",
+    "file": "prayer_sudan.mp3",
+    "sha256": "458143CD7EEEB8238E9A4AD91E78CF61F390D48A755E63CD495742B0D11B25CF",
+    "size": 3067027,
+    "performer": "Unverified; label remains Sudan"
+  }
+]

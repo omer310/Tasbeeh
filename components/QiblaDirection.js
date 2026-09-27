@@ -1,25 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   View, 
   Text, 
   StyleSheet, 
-  Image, 
-  ImageBackground, 
   Animated, 
   Easing, 
-  Alert, 
   TouchableOpacity, 
   Dimensions,
   Vibration,
   Platform 
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import { PageHeader, IconButton } from './ScreenUI';
+import { detectPrayerLocation } from '../services/PrayerLocationService';
+import { withTimeout } from '../utils/withTimeout';
 import * as Location from 'expo-location';
 import { BlurView } from 'expo-blur';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import InstructionsModal from './InstructionsModal';
+import CompassCalibrationSheet from './CompassCalibrationSheet';
+import CompassArtwork, { KAABA_ARTWORK_ANGLE } from './CompassArtwork';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Ionicons } from '@expo/vector-icons';
-import { MaterialIcons } from '@expo/vector-icons';
 
 // First, define the defaultTheme outside the component
 const defaultTheme = {
@@ -35,53 +37,6 @@ const INSTRUCTIONS_SHOWN_KEY = 'qibla_instructions_shown';
 const QIBLA_ALIGNMENT_THRESHOLD = 5;
 const NEAR_ALIGNMENT_THRESHOLD = 15;
 const COMPASS_SMOOTHING_FACTOR = 0.1; // Adjust this value between 0.1 and 0.3 for different smoothing levels
-
-// Add this new component near your other component definitions
-const CalibrationOverlay = ({ onStartCalibration, onClose, themeColors, language }) => {
-  return (
-    <BlurView
-      intensity={95}
-      tint="light"
-      style={[styles.calibrationOverlayContainer]}
-    >
-      <View style={styles.calibrationContent}>
-        <MaterialCommunityIcons 
-          name="compass-off" 
-          size={50} 
-          color={themeColors.primaryColor}
-        />
-        
-        <Text style={[styles.calibrationTitle, { color: themeColors.textColor }]}>
-          {translations.calibrationNeeded[language]}
-        </Text>
-        
-        <Text style={[styles.calibrationInstructions, { color: themeColors.textColor }]}>
-          {translations.calibrationMessage[language]}
-        </Text>
-
-        <View style={styles.calibrationButtons}>
-          <TouchableOpacity
-            style={[styles.calibrationButton, { backgroundColor: themeColors.primaryColor }]}
-            onPress={onStartCalibration}
-          >
-            <Text style={styles.calibrationButtonText}>
-              {translations.startCalibration[language]}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.calibrationButtonSecondary]}
-            onPress={onClose}
-          >
-            <Text style={[styles.calibrationButtonTextSecondary, { color: themeColors.textColor }]}>
-              {translations.later[language]}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </BlurView>
-  );
-};
 
 // Add these new translations to your translations object
 const translations = {
@@ -170,96 +125,61 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
   // State declarations
   const [qiblaDirection, setQiblaDirection] = useState(null);
   const [compassHeading, setCompassHeading] = useState(0);
-  const [userLocation, setUserLocation] = useState(null);
   const [error, setError] = useState(null);
   const [headingAccuracy, setHeadingAccuracy] = useState(null);
-  const [isCalibrating, setIsCalibrating] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
   const [isQiblaAligned, setIsQiblaAligned] = useState(false);
-  const [firstTimeUser, setFirstTimeUser] = useState(true);
-  const rotationAnimation = useRef(new Animated.Value(0)).current;
+  const [rotationAnimation] = useState(() => new Animated.Value(0));
   const smoothedHeading = useRef(0);
   const [showCalibrationOverlay, setShowCalibrationOverlay] = useState(false);
+  const [calibrationReady, setCalibrationReady] = useState(false);
+  const quality = useRef({ goodSince: 0, lowSince: 0, goodSamples: 0, prompted: false });
 
   const getTranslatedText = (key) => {
     return translations[key][language] || key;
   };
 
-  useEffect(() => {
-    let headingSubscription;
-
-    const setupCompass = async () => {
+  const bearing = useRef(null);
+  useFocusEffect(useCallback(() => {
+    let active = true, headingSubscription;
+    quality.current = { goodSince: 0, lowSince: 0, goodSamples: 0, prompted: false };
+    async function setup() {
+      if (Platform.OS === 'web') { setError('The live compass is available in the mobile app.'); return; }
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          setError('Permission to access location was denied');
-          return;
-        }
-
-        const location = await Location.getCurrentPositionAsync({});
-        setUserLocation(location.coords);
-        fetchQiblaDirection(location.coords.latitude, location.coords.longitude);
-
-        headingSubscription = await Location.watchHeadingAsync((heading) => {
-          const headingValue = heading.trueHeading >= 0 ? heading.trueHeading : heading.magHeading;
-          setCompassHeading(headingValue);
-          setHeadingAccuracy(heading.accuracy);
-
-          // Calculate the rotation for the compass image
-          const compassRotation = (360 - headingValue - qiblaDirection + 60) % 360;
-          
-          // Calculate smoothed rotation
-          let delta = compassRotation - smoothedHeading.current;
-          
-          // Handle crossing 360/0 boundary
-          if (delta > 180) delta -= 360;
-          if (delta < -180) delta += 360;
-          
+        setError(null);
+        const coords = await detectPrayerLocation();
+        const response = await withTimeout(fetch(`https://api.aladhan.com/v1/qibla/${coords.latitude}/${coords.longitude}`), 12000, 'Could not calculate Qibla. Check your connection.');
+        const data = await response.json();
+        if (!Number.isFinite(data.data?.direction)) throw new Error('Qibla direction is unavailable.');
+        if (!active) return;
+        bearing.current = data.data.direction; setQiblaDirection(bearing.current);
+        headingSubscription = await Location.watchHeadingAsync(heading => {
+          if (!active) return;
+          const value = heading.trueHeading >= 0 ? heading.trueHeading : heading.magHeading;
+          setCompassHeading(value); setHeadingAccuracy(heading.accuracy);
+          const now = Date.now(), q = quality.current;
+          if (heading.accuracy >= 3) {
+            q.lowSince = 0; q.goodSince ||= now; q.goodSamples++;
+            if (now - q.goodSince >= 2500 && q.goodSamples >= 3) setCalibrationReady(true);
+          } else {
+            q.goodSince = 0; q.goodSamples = 0; if (heading.accuracy < 2) q.lowSince ||= now; else q.lowSince = 0; setCalibrationReady(false);
+            if (q.lowSince && now - q.lowSince >= 2500 && !q.prompted) { q.prompted = true; setShowInstructions(false); setShowCalibrationOverlay(true); }
+          }
+          const rotation = (360 - value) % 360;
+          const delta = ((rotation - smoothedHeading.current + 540) % 360 + 360) % 360 - 180;
           smoothedHeading.current += delta * COMPASS_SMOOTHING_FACTOR;
-          
-          // Normalize the smoothed heading to 0-360 range
-          if (smoothedHeading.current >= 360) smoothedHeading.current -= 360;
-          if (smoothedHeading.current < 0) smoothedHeading.current += 360;
-
-          // Update the animation with smoothed value
-          Animated.timing(rotationAnimation, {
-            toValue: smoothedHeading.current,
-            duration: 16,
-            useNativeDriver: true,
-            easing: Easing.linear,
-          }).start();
+          Animated.timing(rotationAnimation, { toValue: smoothedHeading.current, duration: 80, useNativeDriver: true, easing: Easing.linear }).start();
         });
-      } catch (err) {
-        setError('Error accessing compass');
-      }
-    };
-
-    setupCompass();
-    return () => {
-      if (headingSubscription) {
-        headingSubscription.remove();
-      }
-    };
-  }, [qiblaDirection]);
-
-  // Update the calibration check useEffect
-  useEffect(() => {
-    const checkAccuracy = () => {
-      if (headingAccuracy > 5 || 
-          (qiblaDirection && Math.abs(qiblaDirection - compassHeading) > 180)) {
-        setShowCalibrationOverlay(true);
-      }
-    };
-
-    // Check accuracy after a short delay to allow initial readings
-    const timer = setTimeout(checkAccuracy, 2000);
-
-    return () => clearTimeout(timer);
-  }, [headingAccuracy, qiblaDirection, compassHeading]);
+        if (!active) headingSubscription.remove();
+      } catch (e) { if (active) setError(e.message || 'Could not access the compass.'); }
+    }
+    setup();
+    return () => { active = false; headingSubscription?.remove(); rotationAnimation.stopAnimation(); };
+  }, [rotationAnimation]));
 
   // Enhanced Qibla alignment feedback
   useEffect(() => {
-    if (qiblaDirection && compassHeading) {
+    if (qiblaDirection != null) {
       // Calculate the actual angle difference between current heading and Qibla direction
       let angleDifference = ((qiblaDirection - compassHeading + 360) % 360);
       
@@ -269,53 +189,38 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
       }
       
       // Check if we're actually facing the Qibla
-      const isAligned = Math.abs(angleDifference) < QIBLA_ALIGNMENT_THRESHOLD;
+      const isAligned = headingAccuracy >= 2 && Math.abs(angleDifference) < QIBLA_ALIGNMENT_THRESHOLD;
       
       setIsQiblaAligned(isAligned);
       
-      if (isAligned) {
+      if (isAligned && !isQiblaAligned) {
         Vibration.vibrate([0, 100, 50, 100]);
       }
     }
-  }, [qiblaDirection, compassHeading]);
+  }, [qiblaDirection, compassHeading, headingAccuracy, isQiblaAligned]);
 
   useEffect(() => {
     checkFirstTimeUser();
   }, []);
 
-  const checkFirstTimeUser = async () => {
+  async function checkFirstTimeUser() {
     try {
       const hasShownInstructions = await AsyncStorage.getItem(INSTRUCTIONS_SHOWN_KEY);
       if (!hasShownInstructions) {
         setShowInstructions(true);
         await AsyncStorage.setItem(INSTRUCTIONS_SHOWN_KEY, 'true');
       }
-      setFirstTimeUser(false);
     } catch (error) {
       console.error('Error checking first-time user:', error);
     }
   };
 
-  const fetchQiblaDirection = async (latitude, longitude) => {
-    try {
-      const response = await fetch(`https://api.aladhan.com/v1/qibla/${latitude}/${longitude}`);
-      const data = await response.json();
-      if (data.code === 200 && data.status === 'OK') {
-        setQiblaDirection(data.data.direction);
-      } else {
-        setError('Failed to fetch Qibla direction');
-      }
-    } catch (error) {
-      setError('Error fetching Qibla direction');
-    }
-  };
-
   // Enhanced Compass component with smoother animations
-  const Compass = ({ rotation }) => {
+  const renderCompass = ({ rotation }) => {
     const { width } = Dimensions.get('window');
     const compassSize = width * 0.8;
     
-    const angleDifference = qiblaDirection && compassHeading ? 
+    const angleDifference = qiblaDirection != null ?
       Math.abs(((qiblaDirection - compassHeading + 540) % 360) - 180) : 180;
     
     // Get the rim color for the compass
@@ -336,46 +241,28 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
         <BlurView
           intensity={0}
           style={[StyleSheet.absoluteFill, styles.blurView]}
-          tint="light"
+          tint={themeColors.isDark ? 'dark' : 'light'}
         />
         
         <Animated.View
           style={[
             styles.compassRotation,
             {
-              transform: [{
-                rotate: rotation.interpolate({
-                  inputRange: [0, 360],
-                  outputRange: ['0deg', '360deg'],
-                  extrapolate: 'clamp'
-                })
-              }],
               width: compassSize,
               height: compassSize,
               borderColor: getCompassRimColor(),
               borderWidth: 20,
               borderRadius: 999,
+              backgroundColor: themeColors.isDark ? '#17231D' : '#F6F8EF',
             },
           ]}
         >
-          <Image
-            source={require('../assets/qibla-compass3.png')}
-            style={[
-              styles.compass,
-              {
-                width: '92%',
-                height: '92%',
-                alignSelf: 'center',
-              },
-              isCalibrating && styles.calibratingCompass,
-              isQiblaAligned && styles.compassAligned
-            ]}
-            resizeMode="contain"
-          />
+          <Animated.View style={{ position: 'absolute', transform: [{ rotate: rotation.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'], extrapolate: 'extend' }) }] }}><CompassArtwork size={(compassSize - 40) * 0.92} dark={themeColors.isDark} /></Animated.View>
+          <Animated.View style={{ position: 'absolute', transform: [{ rotate: rotation.interpolate({ inputRange: [0, 360], outputRange: [`${(qiblaDirection || 0) - KAABA_ARTWORK_ANGLE}deg`, `${360 + (qiblaDirection || 0) - KAABA_ARTWORK_ANGLE}deg`], extrapolate: 'extend' }) }] }}><CompassArtwork size={(compassSize - 40) * 0.92} dark={themeColors.isDark} markerOnly /></Animated.View>
         </Animated.View>
 
         <View style={styles.centerTextContainer}>
-          {headingAccuracy > 15 && (
+          {headingAccuracy != null && headingAccuracy < 2 && (
             <TouchableOpacity 
               style={[styles.calibrateButton, { backgroundColor: themeColors.primaryColor }]}
               onPress={() => setShowCalibrationOverlay(true)}
@@ -399,7 +286,7 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
   };
 
   // Update the DirectionIndicator component
-  const DirectionIndicator = ({ angleDifference, themeColors }) => {
+  const renderDirectionIndicator = () => {
     const getIndicatorContent = () => {
       if (isQiblaAligned) {
         return {
@@ -421,10 +308,10 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
     return (
       <View style={directionStyles.container}>
         <Text style={directionStyles.text}>
-          <Text style={directionStyles.prefix}>
+          <Text style={[directionStyles.prefix, { color: themeColors.textColor }]}>
             {content.prefix}
           </Text>
-          <Text style={directionStyles.highlight}>
+          <Text style={[directionStyles.highlight, { color: themeColors.primaryColor }]}>
             {content.highlight}
           </Text>
         </Text>
@@ -432,69 +319,22 @@ export default function QiblaDirection({ themeColors = defaultTheme, language = 
     );
   };
 
-  return (
-    <ImageBackground
-      source={require('../assets/islamic-pattern4.png')}
-      style={[styles.backgroundImage, { backgroundColor: themeColors.backgroundColor }]}
-      resizeMode="cover"
-    >
-      <View style={styles.container}>
-        <View style={styles.contentContainer}>
-          {/* Instructions Modal */}
-          {showInstructions && (
-            <InstructionsModal 
-              visible={showInstructions}
-              onClose={() => setShowInstructions(false)} 
-              themeColors={themeColors}
-              language={language}
-            />
-          )}
-
-          {showCalibrationOverlay && (
-            <CalibrationOverlay
-              onStartCalibration={() => {
-                setIsCalibrating(true);
-                setShowCalibrationOverlay(false);
-                // Start calibration process
-                setTimeout(() => {
-                  setIsCalibrating(false);
-                }, 10000);
-              }}
-              onClose={() => setShowCalibrationOverlay(false)}
-              themeColors={themeColors}
-              language={language}
-            />
-          )}
-
-          {/* Move DirectionIndicator to the top */}
-          <View style={styles.topSection}>
-            <DirectionIndicator 
-              angleDifference={qiblaDirection && compassHeading ? 
-                ((qiblaDirection - compassHeading + 540) % 360) - 180 : 0
-              }
-              themeColors={themeColors}
-            />
-            
-            {/* Move info button next to the direction text */}
-            <TouchableOpacity 
-              style={styles.infoButton}
-              onPress={() => setShowInstructions(true)}
-            >
-              <Ionicons 
-                name="information-circle" 
-                size={28} 
-                color={themeColors.textColor}
-              />
-            </TouchableOpacity>
-          </View>
-
-          <Compass
-            rotation={rotationAnimation}  // Pass the Animated.Value directly
-          />
-        </View>
+  return <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: themeColors.backgroundColor }}>
+    <PageHeader title={language === 'ar' ? 'القبلة' : 'Qibla'} subtitle={language === 'ar' ? 'لحظة للسكينة' : 'Find your direction'} theme={themeColors}><IconButton name="information-circle-outline" label="Compass instructions" color={themeColors.textColor} onPress={() => setShowInstructions(true)} /></PageHeader>
+    <View style={{ flex: 1, alignItems: 'center', paddingBottom: 104, paddingTop: 8 }}>
+      <View style={{ paddingHorizontal: 25, alignItems: 'center', gap: 10 }}>
+        {error ? <Text style={[styles.error, { color: themeColors.textColor }]}>{error}</Text> : qiblaDirection == null ? <Text style={{ color: themeColors.secondaryTextColor }}>{getTranslatedText('calculating')}</Text> : renderDirectionIndicator()}
+        <Text style={{ color: themeColors.secondaryTextColor, fontSize: 13, textAlign: 'center', lineHeight: 21 }}>{language === 'ar' ? 'أمسك هاتفك بشكل مستوٍ وبعيداً عن المعادن' : 'Hold your phone flat, away from metal objects'}</Text>
       </View>
-    </ImageBackground>
-  );
+      {!error && renderCompass({ rotation: rotationAnimation })}
+      <View style={{ alignItems: 'center', gap: 10, paddingBottom: 16 }}>
+        {qiblaDirection != null && <Text style={{ color: themeColors.textColor, fontSize: 15, fontWeight: '600' }}>{Math.round(qiblaDirection)}° · {language === 'ar' ? 'نحو مكة' : 'toward Makkah'}</Text>}
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Calibrate compass" onPress={() => setShowCalibrationOverlay(true)} style={{ paddingVertical: 12, paddingHorizontal: 20, borderRadius: 20, backgroundColor: themeColors.inputBackground }}><Text style={{ color: themeColors.activeTabColor }}>{language === 'ar' ? 'معايرة البوصلة' : 'Calibrate compass'}</Text></TouchableOpacity>
+      </View>
+    </View>
+    <InstructionsModal visible={showInstructions && !showCalibrationOverlay} onClose={() => setShowInstructions(false)} themeColors={themeColors} language={language} />
+    <CompassCalibrationSheet visible={showCalibrationOverlay} ready={calibrationReady} accuracy={headingAccuracy} onClose={() => setShowCalibrationOverlay(false)} theme={themeColors} language={language} />
+  </SafeAreaView>;
 }
 
 const styles = StyleSheet.create({
@@ -703,32 +543,8 @@ const styles = StyleSheet.create({
 
 // Separate styles for the direction indicator
 const directionStyles = StyleSheet.create({
-  container: {
-    width: '100%',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    top: '25%',
-    left: 40,
-  },
-  text: {
-    fontSize: 28,
-    textAlign: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  prefix: {
-    color: '#1F2937', // Dark gray/almost black from the image
-    fontSize: 28,
-    fontWeight: '400', // Regular weight for prefix
-    letterSpacing: 0.3,
-  },
-  highlight: {
-    fontSize: 28,
-    fontWeight: '600', // Semi-bold for the highlighted word
-    color: '#15803D', // Matching the exact green from the images
-    letterSpacing: 0.3,
-  }
+  container: { alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
+  text: { fontSize: 25, textAlign: 'center', lineHeight: 34 },
+  prefix: { fontSize: 25, fontWeight: '400' },
+  highlight: { fontSize: 25, fontWeight: '700' },
 });

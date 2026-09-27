@@ -1,0 +1,15 @@
+Quranic-Recitation-Data / Mualim
+Published by zaibihassan
+https://huggingface.co/datasets/zaibihassan/Quranic-Recitation-Data
+Revision: 70ea7051fdaa8ad6ad5388127f877b40c8b9ec1a
+Publisher-declared license: Apache-2.0 (see quran-recitation-data-LICENSE.txt)
+
+This app includes derived, compact JSON representations of the word timing
+protobuf files for Noreen Siddiq (Duri an Abu Amr) and Alzain Mohammad Ahmad
+(Murattal). Original word indices and timestamps are preserved, including
+invalid/zero-duration ranges. Recordings remain hosted by the publisher.
+
+Changes by Manarat Al-Muslim, 2026-09-10: protobuf timing metadata converted
+to [zero-based word index, start milliseconds, end milliseconds] tuples.
+Playback boundary recovery is separate app logic and does not modify the
+publisher's word timestamps. See docs/QURAN_AUDIO.md for evidence and limits.
